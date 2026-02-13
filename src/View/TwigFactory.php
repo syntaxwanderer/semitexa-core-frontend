@@ -61,18 +61,19 @@ class TwigFactory
             }
         }
 
-        // Project module templates (fallback); then theme overrides (same alias, checked first)
+        // Theme overrides first (so Twig finds them first), then project module templates as fallback
         $projectPaths = self::discoverProjectLayoutPaths();
+        $themePaths = self::discoverThemePaths($projectPaths, $activeTheme);
+        foreach ($themePaths as $module => $themePath) {
+            $loader->addPath($themePath, self::layoutAlias($module));
+        }
         foreach ($projectPaths as $module => $path) {
             $loader->addPath($path, self::layoutAlias($module));
-        }
-        foreach (self::discoverThemePaths() as $module => $themePath) {
-            $loader->addPath($themePath, self::layoutAlias($module));
         }
 
         $cacheDir = self::getWritableCacheDir();
         if (!is_dir($cacheDir)) {
-            @mkdir($cacheDir, 0777, true);
+            @mkdir($cacheDir, 0755, true);
         }
 
         self::$twig = new TwigEnvironment($loader, [
@@ -93,19 +94,20 @@ class TwigFactory
 
     /**
      * Return a Twig cache directory that is writable (project var/cache/twig or fallback to system temp).
+     * Uses 0755; when Swoole runs in Docker as root, run cache:clear via Docker (--via-docker or auto-fallback).
      */
     private static function getWritableCacheDir(): string
     {
         $cacheDir = self::getCacheDir();
         if (!is_dir($cacheDir)) {
-            @mkdir($cacheDir, 0777, true);
+            @mkdir($cacheDir, 0755, true);
         }
         if (is_dir($cacheDir) && is_writable($cacheDir)) {
             return $cacheDir;
         }
         $fallback = sys_get_temp_dir() . '/semitexa-twig-cache';
         if (!is_dir($fallback)) {
-            @mkdir($fallback, 0777, true);
+            @mkdir($fallback, 0755, true);
         }
         return $fallback;
     }
@@ -149,23 +151,46 @@ class TwigFactory
     }
 
     /**
-     * Discover theme override paths: src/theme/{ModuleName}.
-     * Templates here override the same names in project-layouts-{Module}.
-     * Add these after project paths so Twig checks theme first.
+     * Discover theme override paths for layout alias project-layouts-{Module}.
+     * When THEME is set in .env: src/theme/{ThemeName}/{ModuleName}/ (one theme, any module).
+     * When THEME is empty: legacy src/theme/{ModuleName}/ (flat; each dir = one module override).
+     * Only paths that exist are returned; theme is registered first in the loader so it overrides module templates.
+     *
+     * @param array<string, string> $projectPaths module => path (from discoverProjectLayoutPaths)
+     * @param string $activeTheme THEME from .env (e.g. "default", "custom") or empty for legacy
+     * @return array<string, string> module => absolute theme path
      */
-    private static function discoverThemePaths(): array
+    private static function discoverThemePaths(array $projectPaths, string $activeTheme): array
     {
         $projectRoot = LayoutLoader::getProjectRoot();
         $themeRoot = $projectRoot . '/src/theme';
         if (!is_dir($themeRoot)) {
             return [];
         }
+
         $paths = [];
-        $dirs = glob($themeRoot . '/*', GLOB_ONLYDIR) ?: [];
-        foreach ($dirs as $dir) {
-            $module = basename($dir);
-            $paths[$module] = realpath($dir) ?: $dir;
+
+        if ($activeTheme !== '') {
+            $themeDir = $themeRoot . '/' . $activeTheme;
+            if (!is_dir($themeDir)) {
+                return [];
+            }
+            foreach (array_keys($projectPaths) as $module) {
+                $moduleThemePath = $themeDir . '/' . $module;
+                if (is_dir($moduleThemePath)) {
+                    $paths[$module] = realpath($moduleThemePath) ?: $moduleThemePath;
+                }
+            }
+        } else {
+            $dirs = glob($themeRoot . '/*', GLOB_ONLYDIR) ?: [];
+            foreach ($dirs as $dir) {
+                $module = basename($dir);
+                if (isset($projectPaths[$module])) {
+                    $paths[$module] = realpath($dir) ?: $dir;
+                }
+            }
         }
+
         return $paths;
     }
 

@@ -22,6 +22,7 @@ In layout templates: `{{ layout_slot('nav') }}`, `{{ layout_slot('header') }}`, 
 
 ## Theme override
 
-Create `src/theme/Website/one-column.html.twig` (mirror path under the module) to override that template; Twig loads theme first
+- **With THEME in .env:** Put overrides in `src/theme/{THEME}/{ModuleName}/` (e.g. `src/theme/default/Website/one-column.html.twig`). Set `THEME=default` in `.env` to activate. Twig loads theme paths first, so these override the module’s templates.
+- **Legacy (THEME empty):** Use `src/theme/{ModuleName}/` (e.g. `src/theme/Website/one-column.html.twig`) to override that module’s templates. Works for any module that has layout templates.
 
 Use this package when you build HTML pages (not just JSON API). See **semitexa/docs** (e.g. AI_REFERENCE, RECOMMENDED_STACK) and [core/docs/ADDING_ROUTES.md](../semitexa-core/docs/ADDING_ROUTES.md) for the “Responses: JSON and HTML pages” section.
