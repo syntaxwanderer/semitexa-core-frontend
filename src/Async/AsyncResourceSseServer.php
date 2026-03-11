@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Ssr\Async;
 
+use Semitexa\Core\Environment;
 use Swoole\Http\Request;
 use Swoole\Http\Response;
 
@@ -46,17 +47,17 @@ final class AsyncResourceSseServer
         if (!class_exists(\AMQPConnection::class)) {
             return null;
         }
-        $host = getenv('RABBITMQ_HOST') ?: '';
+        $host = Environment::getEnvValue('RABBITMQ_HOST', '');
         if ($host === '') {
             return null;
         }
         try {
             $conn = new \AMQPConnection([
                 'host' => $host,
-                'port' => (int) (getenv('RABBITMQ_PORT') ?: '5672'),
-                'login' => getenv('RABBITMQ_USER') ?: 'guest',
-                'password' => getenv('RABBITMQ_PASSWORD') ?: 'guest',
-                'vhost' => getenv('RABBITMQ_VHOST') ?: '/',
+                'port' => (int) Environment::getEnvValue('RABBITMQ_PORT', '5672'),
+                'login' => Environment::getEnvValue('RABBITMQ_USER', 'guest'),
+                'password' => Environment::getEnvValue('RABBITMQ_PASSWORD', 'guest'),
+                'vhost' => Environment::getEnvValue('RABBITMQ_VHOST', '/'),
             ]);
             $conn->connect();
             self::$amqpChannel = new \AMQPChannel($conn);
