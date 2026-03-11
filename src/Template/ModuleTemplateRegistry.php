@@ -283,7 +283,17 @@ final class ModuleTemplateRegistry
 
             self::$twig->addFunction(new TwigFunction(
                 'current_url',
-                fn (array $overrides = []) => \Semitexa\Ssr\Routing\UrlGenerator::current($overrides)
+                function (array $overrides = []) {
+                    $ctx = \Semitexa\Core\Server\SwooleBootstrap::getCurrentSwooleRequestResponse();
+                    $path = $ctx !== null
+                        ? ($ctx[0]->server['request_uri'] ?? '/')
+                        : '/';
+                    if (!empty($overrides)) {
+                        $query = http_build_query($overrides);
+                        $path = strtok($path, '?') . '?' . $query;
+                    }
+                    return $path;
+                }
             ));
         }
 
