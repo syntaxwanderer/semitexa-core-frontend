@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Ssr\I18n;
 
+use Semitexa\Core\Locale\LocaleContextInterface;
 use Semitexa\Core\Util\ProjectRoot;
 use Semitexa\Locale\Context\LocaleManager;
 use Semitexa\Locale\I18n\Loader\JsonFileLoader;
@@ -21,14 +22,16 @@ use Semitexa\Locale\I18n\TranslationService;
 final class Translator
 {
     private static ?TranslationService $service = null;
+    private static ?LocaleContextInterface $localeContext = null;
     private static bool $initialized = false;
 
     /**
      * Set the backing TranslationService (call at worker boot).
      */
-    public static function setService(TranslationService $service): void
+    public static function setService(TranslationService $service, ?LocaleContextInterface $localeContext = null): void
     {
         self::$service = $service;
+        self::$localeContext = $localeContext ?? self::resolveLocaleContext();
         self::$initialized = true;
     }
 
@@ -48,7 +51,8 @@ final class Translator
             return;
         }
 
-        self::$service = self::buildService();
+        self::$localeContext = self::resolveLocaleContext();
+        self::$service = self::buildService(self::$localeContext);
         self::$initialized = true;
     }
 
@@ -68,20 +72,16 @@ final class Translator
 
     public static function setLocale(string $locale): void
     {
-        if (!class_exists(LocaleManager::class)) {
-            return;
-        }
+        self::initialize();
 
-        LocaleManager::getInstance()->setLocale($locale);
+        self::$localeContext->setLocale($locale);
     }
 
     public static function getLocale(): string
     {
-        if (!class_exists(LocaleManager::class)) {
-            return 'en';
-        }
+        self::initialize();
 
-        return LocaleManager::getInstance()->getLocale();
+        return self::$localeContext->getLocale();
     }
 
     /**
@@ -89,20 +89,28 @@ final class Translator
      */
     public static function reset(): void
     {
+        if (self::$localeContext !== null && class_exists(LocaleManager::class) && self::$localeContext instanceof LocaleManager) {
+            self::$localeContext->setLocale('en');
+        }
+
         self::$service = null;
+        self::$localeContext = null;
         self::$initialized = false;
     }
 
-    private static function buildService(): TranslationService
+    private static function resolveLocaleContext(): LocaleContextInterface
+    {
+        return class_exists(LocaleManager::class)
+            ? LocaleManager::getInstance()
+            : new \Semitexa\Core\Locale\DefaultLocaleContext();
+    }
+
+    private static function buildService(LocaleContextInterface $localeContext): TranslationService
     {
         $catalog = new TranslationCatalog();
         $modulesRoot = ProjectRoot::get() . '/src/modules';
         $loader = new JsonFileLoader($modulesRoot);
         $loader->load($catalog);
-
-        $localeContext = class_exists(LocaleManager::class)
-            ? LocaleManager::getInstance()
-            : new \Semitexa\Core\Locale\DefaultLocaleContext();
 
         return new TranslationService($catalog, $localeContext);
     }
