@@ -4,14 +4,46 @@ declare(strict_types=1);
 
 namespace Semitexa\Ssr\I18n;
 
-use Semitexa\Core\Environment;
+use Semitexa\Core\Locale\LocaleContextInterface;
 use Semitexa\Core\Util\ProjectRoot;
 use Semitexa\Locale\Context\LocaleManager;
+use Semitexa\Locale\I18n\Loader\JsonFileLoader;
+use Semitexa\Locale\I18n\TranslationCatalog;
+use Semitexa\Locale\I18n\TranslationService;
 
+/**
+ * Static facade for backward compatibility.
+ *
+ * Delegates to TranslationService internally. Prefer injecting
+ * TranslationService via DI in new code.
+ *
+ * @deprecated Use Semitexa\Locale\I18n\TranslationService via DI instead.
+ */
 final class Translator
 {
-    private static array $locales = [];
+    private static ?TranslationService $service = null;
+    private static ?LocaleContextInterface $localeContext = null;
     private static bool $initialized = false;
+
+    /**
+     * Set the backing TranslationService (call at worker boot).
+     */
+    public static function setService(TranslationService $service, ?LocaleContextInterface $localeContext = null): void
+    {
+        self::$service = $service;
+        self::$localeContext = $localeContext ?? self::resolveLocaleContext();
+        self::$initialized = true;
+    }
+
+    /**
+     * Get or lazily create the TranslationService.
+     */
+    public static function getService(): TranslationService
+    {
+        self::initialize();
+
+        return self::$service;
+    }
 
     public static function initialize(): void
     {
@@ -19,137 +51,67 @@ final class Translator
             return;
         }
 
-        self::loadLocales();
+        self::$localeContext = self::resolveLocaleContext();
+        self::$service = self::buildService(self::$localeContext);
         self::$initialized = true;
-    }
-
-    private static function loadLocales(): void
-    {
-        $modulesRoot = ProjectRoot::get() . '/src/modules';
-        
-        if (!is_dir($modulesRoot)) {
-            return;
-        }
-
-        foreach (glob($modulesRoot . '/*', GLOB_ONLYDIR) ?: [] as $moduleDir) {
-            $localesDir = $moduleDir . '/Application/View/locales';
-            
-            if (!is_dir($localesDir)) {
-                continue;
-            }
-
-            $module = basename($moduleDir);
-            
-            foreach (glob($localesDir . '/*.json') ?: [] as $file) {
-                $locale = basename($file, '.json');
-                $messages = json_decode(file_get_contents($file), true) ?? [];
-                
-                self::$locales[$locale][$module] = $messages;
-            }
-        }
     }
 
     public static function trans(string $key, array $params = []): string
     {
         self::initialize();
 
-        $message = self::getMessage($key);
-        
-        foreach ($params as $k => $v) {
-            $message = str_replace("{{$k}}", $v, $message);
-        }
-
-        return $message;
+        return self::$service->trans($key, $params);
     }
 
     public static function transChoice(string $key, int $count, array $params = []): string
     {
         self::initialize();
 
-        $messages = self::getMessageWithPlurals($key);
-        
-        $message = match (true) {
-            $count === 1 => $messages['one'] ?? $messages['other'] ?? $key,
-            default => $messages['other'] ?? $messages['one'] ?? $key,
-        };
-
-        $message = str_replace(':count', (string) $count, $message);
-        $message = str_replace('{{count}}', (string) $count, $message);
-
-        foreach ($params as $k => $v) {
-            $message = str_replace("{{$k}}", $v, $message);
-        }
-
-        return $message;
-    }
-
-    private static function getMessage(string $key): string
-    {
-        $locale = self::getCurrentLocale();
-        $fallback = self::getFallbackLocale();
-
-        if (isset(self::$locales[$locale])) {
-            foreach (self::$locales[$locale] as $module => $messages) {
-                if (isset($messages[$key])) {
-                    return $messages[$key];
-                }
-            }
-        }
-
-        if ($fallback !== $locale && isset(self::$locales[$fallback])) {
-            foreach (self::$locales[$fallback] as $module => $messages) {
-                if (isset($messages[$key])) {
-                    return $messages[$key];
-                }
-            }
-        }
-
-        return $key;
-    }
-
-    private static function getMessageWithPlurals(string $key): array
-    {
-        $message = self::getMessage($key);
-        
-        if (str_contains($message, '|')) {
-            $parts = array_map('trim', explode('|', $message));
-            return [
-                'one' => $parts[0] ?? $message,
-                'other' => $parts[1] ?? $parts[0] ?? $message,
-            ];
-        }
-
-        return ['other' => $message];
+        return self::$service->transChoice($key, $count, $params);
     }
 
     public static function setLocale(string $locale): void
     {
-        try {
-            LocaleManager::getInstance()->setLocale($locale);
-        } catch (\Throwable) {
-        }
+        self::initialize();
+
+        self::$localeContext->setLocale($locale);
     }
 
     public static function getLocale(): string
     {
-        return self::getCurrentLocale();
+        self::initialize();
+
+        return self::$localeContext->getLocale();
     }
 
-    private static function getCurrentLocale(): string
+    /**
+     * Reset state (for tests).
+     */
+    public static function reset(): void
     {
-        try {
-            return LocaleManager::getInstance()->getLocale();
-        } catch (\Throwable) {
-            return 'en';
+        if (self::$localeContext !== null && class_exists(LocaleManager::class) && self::$localeContext instanceof LocaleManager) {
+            self::$localeContext->setLocale('en');
         }
+
+        self::$service = null;
+        self::$localeContext = null;
+        self::$initialized = false;
     }
 
-    private static function getFallbackLocale(): string
+    private static function resolveLocaleContext(): LocaleContextInterface
     {
-        try {
-            return LocaleManager::getInstance()->getFallbackLocale() ?? 'en';
-        } catch (\Throwable) {
-            return 'en';
-        }
+        return class_exists(LocaleManager::class)
+            ? LocaleManager::getInstance()
+            : new \Semitexa\Core\Locale\DefaultLocaleContext();
+    }
+
+    private static function buildService(LocaleContextInterface $localeContext): TranslationService
+    {
+        $catalog = new TranslationCatalog();
+        $modulesRoot = ProjectRoot::get() . '/src/modules';
+        $loader = new JsonFileLoader($modulesRoot);
+        $loader->load($catalog);
+
+        return new TranslationService($catalog, $localeContext);
     }
 }
