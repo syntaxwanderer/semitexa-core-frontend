@@ -40,7 +40,7 @@ final class UrlGenerator
             return $path;
         }
 
-        return '/' . $locale . $path;
+        return '/' . $locale . '/' . ltrim($path, '/');
     }
 
     public static function current(Request $request, array $overrides = []): string

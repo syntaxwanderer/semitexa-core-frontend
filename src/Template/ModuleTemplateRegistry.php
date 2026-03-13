@@ -310,7 +310,7 @@ final class ModuleTemplateRegistry
                     if ($locale === $default) {
                         return $path;
                     }
-                    return '/' . $locale . $path;
+                    return '/' . $locale . '/' . ltrim($path, '/');
                 }
             ));
 
@@ -333,11 +333,14 @@ final class ModuleTemplateRegistry
                         $path = '/' . ($segments[1] ?? '');
                     }
 
+                    if (!\Semitexa\Locale\Context\LocaleContextStore::isUrlPrefixEnabled()) {
+                        return $path;
+                    }
                     $default = \Semitexa\Locale\Context\LocaleContextStore::getDefaultLocale();
                     if ($targetLocale === $default) {
                         return $path;
                     }
-                    return '/' . $targetLocale . $path;
+                    return '/' . $targetLocale . '/' . ltrim($path, '/');
                 }
             ));
         }
