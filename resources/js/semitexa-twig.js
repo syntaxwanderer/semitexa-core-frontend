@@ -386,12 +386,15 @@
                     case 'for': {
                         var items = resolve(node.iterExpr, localCtx);
                         if (!items) break;
-                        var arr = Array.isArray(items) ? items : Object.values(items);
-                        var loopLen = arr.length;
+                        var isArray = Array.isArray(items);
+                        var keys = isArray ? items.map(function (_, idx) { return idx; }) : Object.keys(items);
+                        var loopLen = keys.length;
                         for (var fi = 0; fi < loopLen; fi++) {
                             var childCtx = Object.create(localCtx);
-                            childCtx[node.varName] = arr[fi];
-                            if (node.keyName) childCtx[node.keyName] = fi;
+                            var key = keys[fi];
+                            var value = items[key];
+                            childCtx[node.varName] = value;
+                            if (node.keyName) childCtx[node.keyName] = key;
                             childCtx.loop = {
                                 index: fi + 1,
                                 index0: fi,
@@ -523,7 +526,8 @@
         _fallback: function (manifest) {
             if (!manifest || !manifest.requestId) return;
             var self = this;
-            var slotIds = manifest.slots.map(function (s) { return s.id; });
+            var slots = Array.isArray(manifest.slots) ? manifest.slots : [];
+            var slotIds = slots.map(function (s) { return s.id; });
 
             // We need the page handle, extract from manifest or use a data attribute
             var handleEl = document.querySelector('[data-ssr-handle]');

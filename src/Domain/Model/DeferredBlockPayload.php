@@ -13,7 +13,17 @@ final readonly class DeferredBlockPayload
         public ?string $template = null,
         public array $data = [],
         public array $meta = [],
-    ) {}
+    ) {
+        if (!in_array($this->mode, ['html', 'template'], true)) {
+            throw new \InvalidArgumentException('Unsupported deferred block mode.');
+        }
+        if ($this->mode === 'template' && ($this->template === null || $this->template === '')) {
+            throw new \InvalidArgumentException('Template mode requires a non-empty template path.');
+        }
+        if ($this->mode === 'html' && ($this->html === null || $this->html === '')) {
+            throw new \InvalidArgumentException('Html mode requires a non-empty html payload.');
+        }
+    }
 
     public function toArray(): array
     {

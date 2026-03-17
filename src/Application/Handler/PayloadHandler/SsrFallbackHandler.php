@@ -21,12 +21,15 @@ final class SsrFallbackHandler implements TypedHandlerInterface
 
     public function handle(SsrFallbackPayload $payload, GenericResponse $resource): GenericResponse
     {
-        $handle = $payload->getHandle();
+        $handle = trim($payload->getHandle());
         if ($handle === '') {
             throw new NotFoundException('Page handle', '(empty)');
         }
 
-        $slotNames = array_filter(explode(',', $payload->getSlots()));
+        $slotNames = array_values(array_filter(
+            array_map('trim', explode(',', $payload->getSlots())),
+            static fn (string $slot): bool => $slot !== ''
+        ));
 
         $registeredSlots = $this->orchestrator->getDeferredSlots($handle);
         $registeredIds = array_map(static fn ($s) => $s->slotId, $registeredSlots);
