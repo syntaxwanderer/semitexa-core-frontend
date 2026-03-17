@@ -74,7 +74,7 @@ readonly class StaticAssetHandler
 
         $response->status(200);
         $response->header('Content-Type', $contentType);
-        $response->header('Cache-Control', 'public, max-age=3600');
+        $response->header('Cache-Control', 'public, max-age=31536000, immutable');
         $response->sendfile($filePath);
 
         return true;
