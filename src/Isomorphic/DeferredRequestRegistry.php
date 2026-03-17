@@ -62,10 +62,14 @@ final class DeferredRequestRegistry
             self::initialize($config);
         }
 
-        $serializedContext = json_encode($pageContext, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        if ($serializedContext === false) {
+        try {
+            $serializedContext = json_encode(
+                $pageContext,
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR
+            );
+        } catch (\JsonException $e) {
             throw new DeferredRenderingException(
-                'Failed to serialize page context: ' . json_last_error_msg()
+                'Failed to serialize page context: ' . $e->getMessage()
             );
         }
         $contextColumnSize = self::$contextColumnSize > 0 ? self::$contextColumnSize : 8192;
@@ -78,13 +82,25 @@ final class DeferredRequestRegistry
         }
 
         $key = self::tableKey($requestId);
-        self::$table->set($key, [
+        try {
+            $slotsJson = json_encode($slotIds, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+            $deliveredJson = json_encode([], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            throw new DeferredRenderingException(
+                'Failed to serialize deferred request slots: ' . $e->getMessage()
+            );
+        }
+
+        $ok = self::$table->set($key, [
             'page_handle' => $pageHandle,
             'page_context' => $serializedContext,
-            'slots' => json_encode($slotIds, JSON_UNESCAPED_UNICODE),
-            'delivered' => json_encode([], JSON_UNESCAPED_UNICODE),
+            'slots' => $slotsJson,
+            'delivered' => $deliveredJson,
             'created_at' => time(),
         ]);
+        if ($ok === false) {
+            throw new DeferredRenderingException('Failed to store deferred request entry.');
+        }
     }
 
     /**
@@ -141,13 +157,24 @@ final class DeferredRequestRegistry
                 $delivered[] = $slotId;
             }
 
-            self::$table->set($key, [
+            try {
+                $deliveredJson = json_encode($delivered, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+            } catch (\JsonException $e) {
+                throw new DeferredRenderingException(
+                    'Failed to serialize delivered slots: ' . $e->getMessage()
+                );
+            }
+
+            $ok = self::$table->set($key, [
                 'page_handle' => $row['page_handle'],
                 'page_context' => $row['page_context'],
                 'slots' => $row['slots'],
-                'delivered' => json_encode($delivered, JSON_UNESCAPED_UNICODE),
+                'delivered' => $deliveredJson,
                 'created_at' => $row['created_at'],
             ]);
+            if ($ok === false) {
+                throw new DeferredRenderingException('Failed to update deferred request entry.');
+            }
         } finally {
             if ($lock !== null) {
                 $lock->unlock();
