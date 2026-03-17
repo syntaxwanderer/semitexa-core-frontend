@@ -39,7 +39,7 @@ final class RuntimeAssetHandler
 
         $response->status(200);
         $response->header('Content-Type', 'application/javascript; charset=utf-8');
-        $response->header('Cache-Control', 'public, max-age=31536000, immutable');
+        $response->header('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
         $response->header('ETag', $etag);
         $response->end($content);
 
@@ -72,7 +72,10 @@ final class RuntimeAssetHandler
         }
 
         $content = self::getContent();
-        self::$cachedEtag = '"' . substr(md5($content ?? ''), 0, 16) . '"';
+        if ($content === null) {
+            return '""';
+        }
+        self::$cachedEtag = '"' . substr(md5($content), 0, 16) . '"';
         return self::$cachedEtag;
     }
 
