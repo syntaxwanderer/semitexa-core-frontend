@@ -115,11 +115,16 @@ final class PlaceholderRenderer
     }
 
     /**
-     * Generate the <script> tag for the semitexa-twig.js runtime.
+     * Generate the <script defer> tag for the semitexa-twig.js runtime.
+     *
+     * Served via the standard static asset path. The ?v= query parameter
+     * provides cache-busting based on file mtime.
      */
     public static function renderRuntimeScript(): string
     {
-        return '<script src="/assets/ssr/semitexa-twig.js" defer></script>';
+        $path = __DIR__ . '/../Application/Static/js/semitexa-twig.js';
+        $version = @filemtime($path) ?: 0;
+        return '<script src="/assets/ssr/js/semitexa-twig.js?v=' . $version . '" defer></script>';
     }
 
     private static function defaultSkeleton(string $slotId): string

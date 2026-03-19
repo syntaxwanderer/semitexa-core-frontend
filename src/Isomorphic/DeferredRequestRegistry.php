@@ -20,12 +20,15 @@ final class DeferredRequestRegistry
     private const GC_INTERVAL_SECONDS = 60;
     private const MAX_ENTRIES = 4096;
 
-    public static function initialize(?IsomorphicConfig $config = null): void
+    /**
+     * Creates and returns a shared Swoole Table for cross-worker use.
+     *
+     * This must be called BEFORE Swoole forks workers (i.e., before Server::start()).
+     * The returned table is shared across all workers via mmap. Pass it to each worker
+     * via setTable() inside the WorkerStart callback.
+     */
+    public static function createSharedTable(IsomorphicConfig $config): Table
     {
-        $config ??= IsomorphicConfig::fromEnvironment();
-
-        self::$contextColumnSize = $config->deferredContextSize;
-
         $table = new Table(self::MAX_ENTRIES);
         $table->column('page_handle', Table::TYPE_STRING, 128);
         $table->column('page_context', Table::TYPE_STRING, $config->deferredContextSize);
@@ -33,15 +36,37 @@ final class DeferredRequestRegistry
         $table->column('delivered', Table::TYPE_STRING, 2048);
         $table->column('created_at', Table::TYPE_INT);
         $table->create();
+        return $table;
+    }
 
+    /**
+     * Injects an externally-created (shared) Swoole Table.
+     *
+     * Call this in WorkerStart after the table was created pre-fork via createSharedTable().
+     */
+    public static function setTable(Table $table): void
+    {
         self::$table = $table;
+    }
 
-        if (class_exists(\Swoole\Lock::class, false)) {
+    public static function initialize(?IsomorphicConfig $config = null): void
+    {
+        $config ??= IsomorphicConfig::fromEnvironment();
+
+        self::$contextColumnSize = $config->deferredContextSize;
+
+        // If the table was pre-created and injected via setTable() (Swoole multi-worker path),
+        // skip table creation — use the already-shared table.
+        if (self::$table === null) {
+            self::$table = self::createSharedTable($config);
+        }
+
+        if (self::$deliveredLock === null && class_exists(\Swoole\Lock::class, false)) {
             $lockType = \defined('SWOOLE_MUTEX') ? SWOOLE_MUTEX : 2;
             self::$deliveredLock = new \Swoole\Lock($lockType);
         }
 
-        if (class_exists(Timer::class, false)) {
+        if (self::$gcTimerId === 0 && class_exists(Timer::class, false)) {
             self::$gcTimerId = Timer::tick(self::GC_INTERVAL_SECONDS * 1000, static function (): void {
                 self::gc();
             });

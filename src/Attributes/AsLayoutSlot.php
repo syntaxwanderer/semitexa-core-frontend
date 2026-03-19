@@ -20,6 +20,7 @@ class AsLayoutSlot
         public ?string $dataProvider = null,
         public ?string $skeletonTemplate = null,
         public string $mode = 'html',
+        public int $refreshInterval = 0,
     ) {}
 }
 

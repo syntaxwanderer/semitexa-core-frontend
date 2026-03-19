@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Semitexa\Ssr\Application\Service;
 
 use Psr\Container\ContainerInterface;
+use Semitexa\Core\Attributes\AsService;
 use Semitexa\Core\Attributes\InjectAsReadonly;
 use Semitexa\Ssr\Domain\Contract\DataProviderInterface;
 
+#[AsService]
 final class DataProviderRegistry
 {
     #[InjectAsReadonly]
@@ -50,12 +52,12 @@ final class DataProviderRegistry
             }
         }
 
-        if ($this->container === null) {
-            return null;
-        }
-
         try {
-            $instance = $this->container->get($entry['class']);
+            if ($this->container !== null && $this->container->has($entry['class'])) {
+                $instance = $this->container->get($entry['class']);
+            } else {
+                $instance = new $entry['class']();
+            }
         } catch (\Throwable) {
             return null;
         }

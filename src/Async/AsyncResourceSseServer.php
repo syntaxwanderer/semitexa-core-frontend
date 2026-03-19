@@ -238,17 +238,32 @@ final class AsyncResourceSseServer
     private static function triggerDeferredBlocks(string $sessionId, string $deferredRequestId, ?string $lastEventId): void
     {
         $registry = \Semitexa\Ssr\Isomorphic\DeferredRequestRegistry::consume($deferredRequestId);
+
+        $debugLog = static function (string $msg, array $data = []): void {
+            $entry = json_encode(['ssr_sse' => $msg] + $data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $logPath = defined('SEMITEXA_ROOT') ? SEMITEXA_ROOT . '/var/log/debug.log' : (defined('SEMITEXA_PROJECT_ROOT') ? SEMITEXA_PROJECT_ROOT . '/var/log/debug.log' : '/var/www/html/var/log/debug.log');
+            @file_put_contents($logPath, $entry . "\n", FILE_APPEND);
+        };
+
         if ($registry === null) {
+            $debugLog('registry_null', ['deferred_request_id' => $deferredRequestId]);
             self::deliver($sessionId, ['type' => 'done']);
             return;
         }
 
+        $debugLog('registry_found', [
+            'deferred_request_id' => $deferredRequestId,
+            'page_handle' => $registry['page_handle'],
+            'slots' => $registry['slots'],
+        ]);
+
         // Use coroutine to resolve deferred blocks concurrently
         if (class_exists(\Swoole\Coroutine::class, false) && \Swoole\Coroutine::getCid() > 0) {
-            \Swoole\Coroutine::create(static function () use ($sessionId, $registry, $lastEventId, $deferredRequestId): void {
+            \Swoole\Coroutine::create(static function () use ($sessionId, $registry, $lastEventId, $deferredRequestId, $debugLog): void {
                 try {
                     $container = ContainerFactory::get();
                     $orchestrator = $container->get(\Semitexa\Ssr\Application\Service\DeferredBlockOrchestrator::class);
+                    $debugLog('orchestrator_resolved', ['session_id' => $sessionId]);
                     $orchestrator->streamDeferredBlocks(
                         sessionId: $sessionId,
                         pageHandle: $registry['page_handle'],
@@ -257,6 +272,7 @@ final class AsyncResourceSseServer
                         deferredRequestId: $deferredRequestId,
                     );
                 } catch (\Throwable $e) {
+                    $debugLog('streaming_failed', ['error' => $e->getMessage(), 'trace' => substr($e->getTraceAsString(), 0, 500)]);
                     error_log("[Semitexa SSR] Deferred block streaming failed: {$e->getMessage()}");
                     self::deliver($sessionId, ['type' => 'done']);
                 }
@@ -265,6 +281,7 @@ final class AsyncResourceSseServer
             try {
                 $container = ContainerFactory::get();
                 $orchestrator = $container->get(\Semitexa\Ssr\Application\Service\DeferredBlockOrchestrator::class);
+                $debugLog('orchestrator_resolved_sync', ['session_id' => $sessionId]);
                 $orchestrator->streamDeferredBlocks(
                     sessionId: $sessionId,
                     pageHandle: $registry['page_handle'],
@@ -273,6 +290,7 @@ final class AsyncResourceSseServer
                     deferredRequestId: $deferredRequestId,
                 );
             } catch (\Throwable $e) {
+                $debugLog('streaming_failed_sync', ['error' => $e->getMessage()]);
                 error_log("[Semitexa SSR] Deferred block streaming failed (sync): {$e->getMessage()}");
                 self::deliver($sessionId, ['type' => 'done']);
             }
@@ -422,6 +440,11 @@ final class AsyncResourceSseServer
         } catch (\Throwable $e) {
             return '';
         }
+    }
+
+    public static function isSessionActive(string $sessionId): bool
+    {
+        return isset(self::$sessions[trim($sessionId)]);
     }
 
     public static function setServer(\Swoole\Http\Server $server): void

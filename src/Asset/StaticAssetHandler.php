@@ -30,6 +30,9 @@ readonly class StaticAssetHandler
     public function handle(SwooleRequest $request, SwooleResponse $response): bool
     {
         $uri = $request->server['request_uri'] ?? '';
+        if ($uri !== '' && str_contains($uri, '?')) {
+            $uri = explode('?', $uri, 2)[0];
+        }
 
         if (!str_starts_with($uri, self::PREFIX)) {
             return false;
