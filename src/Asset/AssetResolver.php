@@ -57,11 +57,13 @@ final class AssetResolver
         usort($queue, static fn (string $a, string $b) => $entries[$a]->priority <=> $entries[$b]->priority);
 
         $sorted = [];
+        $sortedKeys = [];
         $processed = 0;
 
         while ($queue !== []) {
             $current = array_shift($queue);
             $sorted[] = $entries[$current];
+            $sortedKeys[] = $current;
             $processed++;
 
             $newReady = [];
@@ -96,10 +98,7 @@ final class AssetResolver
         if ($processed < count($entries)) {
             $remaining = array_values(array_diff(
                 array_keys($entries),
-                array_map(
-                    static fn (AssetEntry $e) => $e->key,
-                    $sorted,
-                ),
+                $sortedKeys,
             ));
 
             throw new CircularDependencyException(self::extractCycle($entries, $remaining));
