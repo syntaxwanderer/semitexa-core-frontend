@@ -72,6 +72,7 @@ final class PlaceholderRenderer
         string $requestId,
         string $sessionId,
         array $slots,
+        string $bindToken = '',
     ): string {
         $slotManifest = [];
         foreach ($slots as $slot) {
@@ -98,6 +99,7 @@ final class PlaceholderRenderer
         $manifest = [
             'requestId' => $requestId,
             'sessionId' => $sessionId,
+            'bindToken' => $bindToken,
             'slots' => $slotManifest,
         ];
 
@@ -109,7 +111,7 @@ final class PlaceholderRenderer
         } catch (\JsonException $e) {
             // Log the error and fall back to a minimal, valid manifest to avoid breaking client initialization.
             error_log('Failed to JSON-encode SSR deferred manifest: ' . $e->getMessage());
-            $json = '{"requestId":"","sessionId":"","slots":[]}';
+            $json = '{"requestId":"","sessionId":"","bindToken":"","slots":[]}';
         }
 
         return '<script>window.__SSR_DEFERRED=' . $json . ';</script>';

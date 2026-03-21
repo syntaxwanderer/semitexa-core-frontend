@@ -91,12 +91,17 @@ final class AsyncResourceSseServer
 
     private static function handleSse(Request $request, Response $response): void
     {
+        if (!self::isSameOriginRequest($request)) {
+            $response->status(403);
+            $response->end();
+            return;
+        }
+
         $response->status(200);
         $response->header('Content-Type', 'text/event-stream');
         $response->header('Cache-Control', 'no-cache');
         $response->header('Connection', 'keep-alive');
         $response->header('X-Accel-Buffering', 'no');
-        $response->header('Access-Control-Allow-Origin', '*');
 
         $sessionId = trim((string) ($request->get['session_id'] ?? uniqid('sse_', true)));
 
@@ -170,6 +175,13 @@ final class AsyncResourceSseServer
         $deferredRequestId = trim((string) ($request->get['deferred_request_id'] ?? ''));
         $lastEventId = $request->header['last-event-id'] ?? null;
         if ($deferredRequestId !== '') {
+            $bindToken = self::getSsrBindToken($request);
+            if (!\Semitexa\Ssr\Isomorphic\DeferredRequestRegistry::matchesBindToken($deferredRequestId, $bindToken)) {
+                self::writeSse($response, ['type' => 'done']);
+                $response->end();
+                unset(self::$sessions[$sessionId], self::$queues[$sessionId]);
+                return;
+            }
             self::triggerDeferredBlocks($sessionId, $deferredRequestId, $lastEventId);
         }
 
@@ -492,5 +504,41 @@ final class AsyncResourceSseServer
     private static function sessionTableKey(string $sessionId): string
     {
         return strlen($sessionId) > 63 ? md5($sessionId) : $sessionId;
+    }
+
+    private static function getSsrBindToken(Request $request): string
+    {
+        $cookieName = 'semitexa_ssr_bind';
+        return trim((string) (($request->cookie[$cookieName] ?? '')));
+    }
+
+    private static function isSameOriginRequest(Request $request): bool
+    {
+        $host = trim((string) (($request->header['host'] ?? '')));
+        if ($host === '') {
+            return true;
+        }
+
+        foreach (['origin', 'referer'] as $headerName) {
+            $value = trim((string) (($request->header[$headerName] ?? '')));
+            if ($value === '') {
+                continue;
+            }
+
+            $requestHost = parse_url($value, PHP_URL_HOST);
+            if (!is_string($requestHost) || $requestHost === '') {
+                continue;
+            }
+
+            $requestPort = parse_url($value, PHP_URL_PORT);
+            $normalizedHost = strtolower($host);
+            $normalizedRequestHost = strtolower($requestHost . ($requestPort !== null ? ':' . $requestPort : ''));
+
+            if ($normalizedRequestHost !== $normalizedHost && strtolower($requestHost) !== $normalizedHost) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
