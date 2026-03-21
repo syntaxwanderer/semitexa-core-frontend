@@ -9,6 +9,7 @@ use Semitexa\Core\Attributes\InjectAsReadonly;
 use Semitexa\Core\Contract\TypedHandlerInterface;
 use Semitexa\Core\Exception\NotFoundException;
 use Semitexa\Core\Http\Response\GenericResponse;
+use Semitexa\Core\Request;
 use Semitexa\Ssr\Application\Payload\Request\SsrLocaleSwitchPayload;
 use Semitexa\Ssr\Application\Service\DeferredBlockOrchestrator;
 use Semitexa\Ssr\Async\AsyncResourceSseServer;
@@ -20,6 +21,8 @@ final class SsrLocaleSwitchHandler implements TypedHandlerInterface
 {
     #[InjectAsReadonly]
     protected DeferredBlockOrchestrator $orchestrator;
+
+    protected Request $request;
 
     public function handle(SsrLocaleSwitchPayload $payload, GenericResponse $resource): GenericResponse
     {
@@ -50,6 +53,10 @@ final class SsrLocaleSwitchHandler implements TypedHandlerInterface
 
         $entry = DeferredRequestRegistry::consume($requestId);
         if ($entry === null) {
+            throw new NotFoundException('Deferred request', $requestId);
+        }
+        $bindToken = $this->request->getCookie('semitexa_ssr_bind', '');
+        if ($bindToken === '' || !hash_equals($entry['bind_token'], $bindToken)) {
             throw new NotFoundException('Deferred request', $requestId);
         }
 

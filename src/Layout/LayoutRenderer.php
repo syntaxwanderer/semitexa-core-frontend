@@ -65,7 +65,8 @@ class LayoutRenderer
 
                     // Store deferred request context in Swoole Table
                     $slotIds = array_map(static fn ($s) => $s->slotId, $deferredSlots);
-                    DeferredRequestRegistry::store($requestId, $handle, $context, $slotIds);
+                    $bindToken = bin2hex(random_bytes(16));
+                    DeferredRequestRegistry::store($requestId, $handle, $context, $slotIds, $bindToken);
 
                     IsomorphicContextStore::setPageHandle($handle);
                     IsomorphicContextStore::setDeferredSlots($deferredSlots);
@@ -77,7 +78,12 @@ class LayoutRenderer
 
                     // Generate preload hints, manifest, and runtime script
                     $baseContext['__ssr_preload_hints'] = PlaceholderRenderer::renderPreloadHints($deferredSlots);
-                    $baseContext['__ssr_deferred_manifest'] = PlaceholderRenderer::renderManifest($requestId, $sessionId, $deferredSlots);
+                    $baseContext['__ssr_deferred_manifest'] = PlaceholderRenderer::renderManifest(
+                        $requestId,
+                        $sessionId,
+                        $deferredSlots,
+                        $bindToken,
+                    );
                     $baseContext['__ssr_runtime_script'] = PlaceholderRenderer::renderRuntimeScript();
                     $baseContext['__ssr_handle_attr'] = ' data-ssr-handle="' . htmlspecialchars($handle, ENT_QUOTES, 'UTF-8') . '"';
                 }

@@ -440,6 +440,7 @@
             if (!manifest || !manifest.requestId) return;
             var self = this;
             self._manifest = manifest;
+            self._setBindCookie(manifest);
             var sseUrl = '/__semitexa_kiss?session_id=' + encodeURIComponent(manifest.sessionId)
                 + '&deferred_request_id=' + encodeURIComponent(manifest.requestId);
 
@@ -496,6 +497,11 @@
                 self._connected = false;
                 self._fallback(manifest);
             };
+        },
+
+        _setBindCookie: function (manifest) {
+            if (!manifest || !manifest.bindToken) return;
+            document.cookie = 'semitexa_ssr_bind=' + encodeURIComponent(manifest.bindToken) + '; Path=/; SameSite=Lax';
         },
 
         _handleMessage: function (payload) {

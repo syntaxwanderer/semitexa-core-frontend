@@ -32,6 +32,7 @@ final class DeferredRequestRegistry
         $table = new Table(self::MAX_ENTRIES);
         $table->column('page_handle', Table::TYPE_STRING, 128);
         $table->column('page_context', Table::TYPE_STRING, $config->deferredContextSize);
+        $table->column('bind_token', Table::TYPE_STRING, 64);
         $table->column('slots', Table::TYPE_STRING, 2048);
         $table->column('delivered', Table::TYPE_STRING, 2048);
         $table->column('created_at', Table::TYPE_INT);
@@ -78,6 +79,7 @@ final class DeferredRequestRegistry
         string $pageHandle,
         array $pageContext,
         array $slotIds,
+        string $bindToken = '',
     ): void {
         if (self::$table === null) {
             $config = IsomorphicConfig::fromEnvironment();
@@ -122,6 +124,7 @@ final class DeferredRequestRegistry
         $ok = self::$table->set($key, [
             'page_handle' => $pageHandle,
             'page_context' => $serializedContext,
+            'bind_token' => $bindToken,
             'slots' => $slotsJson,
             'delivered' => $deliveredJson,
             'created_at' => time(),
@@ -134,7 +137,7 @@ final class DeferredRequestRegistry
     /**
      * Consume a deferred request entry. Returns null if not found or expired.
      *
-     * @return array{page_handle: string, page_context: array, slots: string[], delivered: string[]}|null
+     * @return array{page_handle: string, page_context: array, bind_token: string, slots: string[], delivered: string[]}|null
      */
     public static function consume(string $requestId): ?array
     {
@@ -157,6 +160,7 @@ final class DeferredRequestRegistry
         return [
             'page_handle' => trim((string) $row['page_handle']),
             'page_context' => json_decode((string) $row['page_context'], true) ?: [],
+            'bind_token' => trim((string) ($row['bind_token'] ?? '')),
             'slots' => json_decode((string) $row['slots'], true) ?: [],
             'delivered' => json_decode((string) $row['delivered'], true) ?: [],
         ];
@@ -196,6 +200,7 @@ final class DeferredRequestRegistry
             $ok = self::$table->set($key, [
                 'page_handle' => $row['page_handle'],
                 'page_context' => $row['page_context'],
+                'bind_token' => $row['bind_token'] ?? '',
                 'slots' => $row['slots'],
                 'delivered' => $deliveredJson,
                 'created_at' => $row['created_at'],
@@ -208,6 +213,20 @@ final class DeferredRequestRegistry
                 $lock->unlock();
             }
         }
+    }
+
+    public static function matchesBindToken(string $requestId, string $bindToken): bool
+    {
+        if ($bindToken === '') {
+            return false;
+        }
+
+        $entry = self::consume($requestId);
+        if ($entry === null) {
+            return false;
+        }
+
+        return hash_equals($entry['bind_token'], $bindToken);
     }
 
     public static function remove(string $requestId): void

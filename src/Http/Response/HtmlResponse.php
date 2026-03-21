@@ -264,7 +264,8 @@ class HtmlResponse extends GenericResponse
 
         $slotIds = array_map(static fn ($s) => $s->slotId, $deferredSlots);
         $serializableContext = self::sanitizeDeferredContext($context);
-        DeferredRequestRegistry::store($requestId, $handle, $serializableContext, $slotIds);
+        $bindToken = bin2hex(random_bytes(16));
+        DeferredRequestRegistry::store($requestId, $handle, $serializableContext, $slotIds, $bindToken);
 
         IsomorphicContextStore::setPageHandle($handle);
         IsomorphicContextStore::setDeferredSlots($deferredSlots);
@@ -273,7 +274,12 @@ class HtmlResponse extends GenericResponse
         $context['__ssr_deferred_request_id'] = $requestId;
         $context['__ssr_deferred_session_id'] = $sessionId;
         $context['__ssr_preload_hints'] = PlaceholderRenderer::renderPreloadHints($deferredSlots);
-        $context['__ssr_deferred_manifest'] = PlaceholderRenderer::renderManifest($requestId, $sessionId, $deferredSlots);
+        $context['__ssr_deferred_manifest'] = PlaceholderRenderer::renderManifest(
+            $requestId,
+            $sessionId,
+            $deferredSlots,
+            $bindToken,
+        );
         $context['__ssr_runtime_script'] = PlaceholderRenderer::renderRuntimeScript();
         $context['__ssr_handle_attr'] = ' data-ssr-handle="' . htmlspecialchars($handle, ENT_QUOTES, 'UTF-8') . '"';
 
