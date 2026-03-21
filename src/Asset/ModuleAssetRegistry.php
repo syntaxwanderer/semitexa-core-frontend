@@ -123,7 +123,7 @@ class ModuleAssetRegistry
     public static function resolve(string $module, string $path): ?string
     {
         if (!self::$initialized) {
-            return null;
+            self::initialize();
         }
 
         $baseDirs = self::$map[$module] ?? null;

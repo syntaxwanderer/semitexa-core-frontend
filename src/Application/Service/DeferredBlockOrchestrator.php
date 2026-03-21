@@ -39,6 +39,7 @@ final class DeferredBlockOrchestrator
         ?string $locale = null,
     ): void {
         $slots = $this->getDeferredSlots($pageHandle);
+        $liveSlots = array_values(array_filter($slots, static fn (DeferredSlotDefinition $s) => $s->refreshInterval > 0));
 
         self::debugLog('stream_start', [
             'page_handle' => $pageHandle,
@@ -107,7 +108,6 @@ final class DeferredBlockOrchestrator
                 }
             }
 
-        $liveSlots = array_values(array_filter($slots, static fn (DeferredSlotDefinition $s) => $s->refreshInterval > 0));
             SseAsyncResultDelivery::deliverRaw($sessionId, ['type' => 'done', 'live' => $liveSlots !== []]);
             $this->runLiveLoop($sessionId, $pageHandle, $pageContext, $liveSlots, $locale);
             return;
@@ -180,7 +180,6 @@ final class DeferredBlockOrchestrator
 
         $wg->wait();
 
-        $liveSlots = array_values(array_filter($slots, static fn (DeferredSlotDefinition $s) => $s->refreshInterval > 0));
         SseAsyncResultDelivery::deliverRaw($sessionId, ['type' => 'done', 'live' => $liveSlots !== []]);
 
         $this->runLiveLoop($sessionId, $pageHandle, $pageContext, $liveSlots, $locale);

@@ -161,7 +161,7 @@ final class AssetCollector
 
     /**
      * Discover Application/Static/assets.json manifests from all registered modules.
-     * Errors at boot if a Static/ directory exists without an assets.json.
+     * Logs an error at boot if a Static/ directory exists without an assets.json, but continues.
      */
     private static function discoverManifests(): void
     {

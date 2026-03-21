@@ -87,6 +87,7 @@ final class DeferredRequestRegistry
             self::initialize($config);
         }
 
+        $pageContext = self::sanitizeContext($pageContext);
         self::validateContext($pageContext);
 
         try {
@@ -217,6 +218,64 @@ final class DeferredRequestRegistry
     public static function getTable(): ?Table
     {
         return self::$table;
+    }
+
+    /**
+     * @param array<string, mixed> $context
+     *
+     * @return array<string, mixed>
+     */
+    private static function sanitizeContext(array $context): array
+    {
+        $sanitized = [];
+
+        foreach ($context as $key => $value) {
+            if (!is_string($key) && !is_int($key)) {
+                continue;
+            }
+
+            $normalized = self::sanitizeValue($value);
+            if ($normalized === self::unsupportedMarker()) {
+                continue;
+            }
+
+            $sanitized[$key] = $normalized;
+        }
+
+        return $sanitized;
+    }
+
+    private static function sanitizeValue(mixed $value): mixed
+    {
+        if ($value === null || is_scalar($value)) {
+            return $value;
+        }
+
+        if (!is_array($value)) {
+            return self::unsupportedMarker();
+        }
+
+        $sanitized = [];
+        foreach ($value as $key => $item) {
+            if (!is_string($key) && !is_int($key)) {
+                continue;
+            }
+
+            $normalized = self::sanitizeValue($item);
+            if ($normalized === self::unsupportedMarker()) {
+                continue;
+            }
+
+            $sanitized[$key] = $normalized;
+        }
+
+        return $sanitized;
+    }
+
+    private static function unsupportedMarker(): object
+    {
+        static $marker;
+        return $marker ??= new \stdClass();
     }
 
     private static function gc(): void
