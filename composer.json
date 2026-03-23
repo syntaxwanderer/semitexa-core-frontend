@@ -26,5 +26,12 @@
             "name": "core-frontend",
             "description": "Server-Side Rendering capabilities using Twig"
         }
-    }
+    },
+    "keywords": [
+        "semitexa",
+        "ssr",
+        "twig",
+        "rendering",
+        "frontend"
+    ]
 }
