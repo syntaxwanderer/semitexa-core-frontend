@@ -1,6 +1,6 @@
 {
     "name": "semitexa/ssr",
-    "description": "Semitexa Core Frontend (SSR) module with Twig rendering",
+    "description": "Semitexa SSR - Twig-based server rendering with components, layouts, assets, and deferred slots",
     "version": "1.0.30",
     "type": "semitexa-module",
     "license": "MIT",
@@ -32,6 +32,9 @@
         "ssr",
         "twig",
         "rendering",
-        "frontend"
+        "frontend",
+        "components",
+        "layouts",
+        "deferred"
     ]
 }
