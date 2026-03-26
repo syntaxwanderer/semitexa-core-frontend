@@ -347,7 +347,7 @@ final class DeferredBlockOrchestrator
             $slotInstance = SlotResourceFactory::create($slot->resourceClass);
             $slotInstance = SlotHandlerPipeline::execute($slotInstance);
             SlotAssetCollector::collectFromSlot($slotInstance);
-            return $slotInstance->getRenderContext();
+            return array_merge($slotInstance->getStaticContext(), $slotInstance->getRenderContext());
         }
 
         $provider = $this->dataProviderRegistry->resolve($slot->slotId, $pageHandle);
