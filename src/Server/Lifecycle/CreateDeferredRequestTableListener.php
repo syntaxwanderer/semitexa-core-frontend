@@ -10,6 +10,7 @@ use Semitexa\Core\Server\Lifecycle\ServerLifecycleListenerInterface;
 use Semitexa\Core\Server\Lifecycle\ServerLifecyclePhase;
 use Semitexa\Ssr\Configuration\IsomorphicConfig;
 use Semitexa\Ssr\Isomorphic\DeferredRequestRegistry;
+use Swoole\Table;
 
 #[AsServerLifecycleListener(
     phase: ServerLifecyclePhase::PreStart->value,
@@ -24,7 +25,9 @@ final class CreateDeferredRequestTableListener implements ServerLifecycleListene
             return;
         }
 
-        if (!class_exists(DeferredRequestRegistry::class) || !method_exists(DeferredRequestRegistry::class, 'createSharedTable')) {
+        if (!class_exists(Table::class, false)
+            || !class_exists(DeferredRequestRegistry::class)
+            || !method_exists(DeferredRequestRegistry::class, 'createSharedTable')) {
             return;
         }
 

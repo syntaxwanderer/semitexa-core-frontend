@@ -8,7 +8,7 @@ Renders HTML responses using Twig. Provides a component system discovered via `#
 
 ## Role in Semitexa
 
-Depends on Twig, Locale, and Tenancy. Depended on by Mail, Platform WM, Platform User, Platform Settings, and Demo. Required for any package that renders HTML pages.
+Depends on Twig, Locale, and Tenancy. Used by Mail, Platform WM, Platform User, Platform Settings, and Demo. Required for packages that render HTML pages.
 
 ## Key Features
 

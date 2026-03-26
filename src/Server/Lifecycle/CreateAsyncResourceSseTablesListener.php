@@ -22,7 +22,7 @@ final class CreateAsyncResourceSseTablesListener implements ServerLifecycleListe
 
     public function handle(ServerLifecycleContext $context): void
     {
-        if ($context->bootstrapState === null) {
+        if ($context->bootstrapState === null || !class_exists(Table::class, false)) {
             return;
         }
 
