@@ -108,6 +108,37 @@ class LayoutSlotRegistry
     }
 
     /**
+     * @return array<string,array{deferred:bool}>
+     */
+    public static function describeSlotsForPage(string $pageHandle, ?string $layoutHandle = null): array
+    {
+        $description = [];
+
+        foreach ([self::GLOBAL_HANDLE, $layoutHandle, $pageHandle] as $handle) {
+            if ($handle === null || $handle === '') {
+                continue;
+            }
+
+            $handleKey = strtolower($handle);
+            foreach (self::$slots[$handleKey] ?? [] as $slotName => $entries) {
+                if (!isset($description[$slotName])) {
+                    $description[$slotName] = ['deferred' => false];
+                }
+
+                foreach ($entries as $entry) {
+                    if (($entry['deferred'] ?? false) === true) {
+                        $description[$slotName]['deferred'] = true;
+                    }
+                }
+            }
+        }
+
+        ksort($description);
+
+        return $description;
+    }
+
+    /**
      * Get all deferred slot definitions for a given page handle.
      *
      * @return DeferredSlotDefinition[]

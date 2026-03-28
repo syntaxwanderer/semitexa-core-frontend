@@ -10,6 +10,7 @@ use Semitexa\Core\Response as CoreResponse;
 use Semitexa\Core\Server\SwooleBootstrap;
 use Semitexa\Ssr\Configuration\IsomorphicConfig;
 use Semitexa\Ssr\Context\IsomorphicContextStore;
+use Semitexa\Ssr\Context\PageRenderContextStore;
 use Semitexa\Ssr\Isomorphic\DeferredRequestRegistry;
 use Semitexa\Ssr\Isomorphic\DeferredTemplateRegistry;
 use Semitexa\Ssr\Isomorphic\PlaceholderRenderer;
@@ -92,7 +93,10 @@ class HtmlResponse extends GenericResponse
             $context['layout_handle'] ??= $handle;
         }
 
+        $context['response'] ??= $this;
+
         $context = $this->applyIsomorphicContext($context);
+        PageRenderContextStore::set($context);
 
         $html = ModuleTemplateRegistry::getTwig()->render($tmpl, $context);
         $this->setContent($html);

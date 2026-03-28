@@ -6,6 +6,7 @@ namespace Semitexa\Ssr\Layout;
 
 use Semitexa\Ssr\Configuration\IsomorphicConfig;
 use Semitexa\Ssr\Context\IsomorphicContextStore;
+use Semitexa\Ssr\Context\PageRenderContextStore;
 use Semitexa\Ssr\Isomorphic\DeferredRequestRegistry;
 use Semitexa\Ssr\Isomorphic\DeferredTemplateRegistry;
 use Semitexa\Ssr\Isomorphic\PlaceholderRenderer;
@@ -89,9 +90,12 @@ class LayoutRenderer
                 }
             }
 
+            $mergedContext = array_merge($baseContext, $context);
+            PageRenderContextStore::set($mergedContext);
+
             return ModuleTemplateRegistry::getTwig()->render(
                 $layout['template'],
-                array_merge($baseContext, $context)
+                $mergedContext
             );
         } catch (\Throwable $e) {
             error_log("Error rendering layout '{$handle}': " . $e->getMessage());

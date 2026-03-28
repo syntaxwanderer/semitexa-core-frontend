@@ -20,6 +20,7 @@ Depends on Twig, Locale, and Tenancy. Used by Mail, Platform WM, Platform User, 
 - `UrlGenerator` with locale-aware routing
 - `ModuleTemplateRegistry` for per-module template discovery
 - Development hot-reload support
+- Automatic `robots.txt` fallback with Semitexa-specific crawler hints when the project does not provide a real file
 
 ## Deferred SSE Safety
 
@@ -30,3 +31,7 @@ Depends on Twig, Locale, and Tenancy. Used by Mail, Platform WM, Platform User, 
 ## Notes
 
 SSR is required for HTML pages. JSON-only APIs do not need this package. Layout slots use handle-based scoping: `*` for global, layout frame name, or specific page handle.
+
+If a project does not provide `robots.txt` or `public/robots.txt`, SSR emits a minimal default file automatically. Set `ROBOTS_SITEMAP_URL` when you want the generated file to advertise a classic sitemap explicitly. SSR also exposes `/sitemap.json` as a crawler-oriented JSON route inventory and advertises it from the fallback `robots.txt`.
+
+When an SSR page route declares extra response formats via `#[AsPayload(produces: ...)]`, Semitexa renders `<link rel="alternate" type="...">` tags for the non-HTML variants of the current payload DTO. This keeps the `<head>` aligned with the actual route contract instead of hardcoding alternates in Twig.
