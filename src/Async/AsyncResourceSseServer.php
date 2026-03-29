@@ -305,15 +305,18 @@ final class AsyncResourceSseServer
             return;
         }
 
+        $locale = $registry['locale'] ?? '';
+
         $debugLog('registry_found', [
             'deferred_request_id' => $deferredRequestId,
             'page_handle' => $registry['page_handle'],
             'slots' => $registry['slots'],
+            'locale' => $locale,
         ]);
 
         // Use coroutine to resolve deferred blocks concurrently
         if (class_exists(\Swoole\Coroutine::class, false) && \Swoole\Coroutine::getCid() > 0) {
-            \Swoole\Coroutine::create(static function () use ($sessionId, $registry, $lastEventId, $deferredRequestId, $debugLog, $allowPersistentDeferredSse): void {
+            \Swoole\Coroutine::create(static function () use ($sessionId, $registry, $lastEventId, $deferredRequestId, $debugLog, $allowPersistentDeferredSse, $locale): void {
                 try {
                     $container = ContainerFactory::get();
                     $orchestrator = $container->get(\Semitexa\Ssr\Application\Service\DeferredBlockOrchestrator::class);
@@ -324,6 +327,7 @@ final class AsyncResourceSseServer
                         pageContext: $registry['page_context'],
                         lastEventId: $lastEventId,
                         deferredRequestId: $deferredRequestId,
+                        locale: $locale !== '' ? $locale : null,
                         startLiveLoop: $allowPersistentDeferredSse,
                     );
                 } catch (\Throwable $e) {
@@ -348,6 +352,7 @@ final class AsyncResourceSseServer
                     pageContext: $registry['page_context'],
                     lastEventId: $lastEventId,
                     deferredRequestId: $deferredRequestId,
+                    locale: $locale !== '' ? $locale : null,
                     startLiveLoop: $allowPersistentDeferredSse,
                 );
             } catch (\Throwable $e) {
