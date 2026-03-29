@@ -269,7 +269,11 @@ class HtmlResponse extends GenericResponse
         $slotIds = array_map(static fn ($s) => $s->slotId, $deferredSlots);
         $serializableContext = self::sanitizeDeferredContext($context);
         $bindToken = bin2hex(random_bytes(16));
-        DeferredRequestRegistry::store($requestId, $handle, $serializableContext, $slotIds, $bindToken);
+        $locale = '';
+        if (class_exists(\Semitexa\Locale\Context\LocaleContextStore::class)) {
+            $locale = \Semitexa\Locale\Context\LocaleContextStore::getLocale();
+        }
+        DeferredRequestRegistry::store($requestId, $handle, $serializableContext, $slotIds, $bindToken, $locale);
 
         IsomorphicContextStore::setPageHandle($handle);
         IsomorphicContextStore::setDeferredSlots($deferredSlots);
