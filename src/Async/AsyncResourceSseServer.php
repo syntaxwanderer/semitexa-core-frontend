@@ -175,6 +175,7 @@ final class AsyncResourceSseServer
             if (self::$sessionWorkerTable !== null) {
                 self::$sessionWorkerTable->del(self::sessionTableKey($sessionId));
             }
+            self::deleteRabbitMqQueueForSession($sessionId);
             unset(self::$sessions[$sessionId], self::$queues[$sessionId]);
             $response->end();
             return;
@@ -264,17 +265,7 @@ final class AsyncResourceSseServer
         if (self::$sessionWorkerTable !== null) {
             self::$sessionWorkerTable->del(self::sessionTableKey($sessionId));
         }
-        // Delete RabbitMQ queue for this session to avoid buildup (queue recreated on next connect)
-        $channel = self::getRabbitMqChannel();
-        if ($channel !== null) {
-            try {
-                $queue = new \AMQPQueue($channel);
-                $queue->setName(self::rabbitQueueName($sessionId));
-                $queue->delete();
-            } catch (\Throwable $e) {
-                // ignore
-            }
-        }
+        self::deleteRabbitMqQueueForSession($sessionId);
         unset(self::$sessions[$sessionId]);
         unset(self::$queues[$sessionId]);
         $response->end();
@@ -406,6 +397,22 @@ final class AsyncResourceSseServer
             self::$amqpChannel = null;
         }
         return false;
+    }
+
+    private static function deleteRabbitMqQueueForSession(string $sessionId): void
+    {
+        $channel = self::getRabbitMqChannel();
+        if ($channel === null) {
+            return;
+        }
+
+        try {
+            $queue = new \AMQPQueue($channel);
+            $queue->setName(self::rabbitQueueName($sessionId));
+            $queue->delete();
+        } catch (\Throwable $e) {
+            // ignore
+        }
     }
 
     private static function writeSse(Response $response, array $data): bool
