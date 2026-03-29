@@ -6,6 +6,7 @@ namespace Semitexa\Ssr\Layout;
 
 use Semitexa\Ssr\Configuration\IsomorphicConfig;
 use Semitexa\Ssr\Context\IsomorphicContextStore;
+use Semitexa\Ssr\Context\PageRenderContextStore;
 use Semitexa\Ssr\Isomorphic\DeferredRequestRegistry;
 use Semitexa\Ssr\Isomorphic\DeferredTemplateRegistry;
 use Semitexa\Ssr\Isomorphic\PlaceholderRenderer;
@@ -66,7 +67,11 @@ class LayoutRenderer
                     // Store deferred request context in Swoole Table
                     $slotIds = array_map(static fn ($s) => $s->slotId, $deferredSlots);
                     $bindToken = bin2hex(random_bytes(16));
-                    DeferredRequestRegistry::store($requestId, $handle, $context, $slotIds, $bindToken);
+                    $locale = '';
+                    if (class_exists(\Semitexa\Locale\Context\LocaleContextStore::class)) {
+                        $locale = \Semitexa\Locale\Context\LocaleContextStore::getLocale();
+                    }
+                    DeferredRequestRegistry::store($requestId, $handle, $context, $slotIds, $bindToken, $locale);
 
                     IsomorphicContextStore::setPageHandle($handle);
                     IsomorphicContextStore::setDeferredSlots($deferredSlots);
@@ -89,9 +94,12 @@ class LayoutRenderer
                 }
             }
 
+            $mergedContext = array_merge($baseContext, $context);
+            PageRenderContextStore::set($mergedContext);
+
             return ModuleTemplateRegistry::getTwig()->render(
                 $layout['template'],
-                array_merge($baseContext, $context)
+                $mergedContext
             );
         } catch (\Throwable $e) {
             error_log("Error rendering layout '{$handle}': " . $e->getMessage());
@@ -100,6 +108,8 @@ class LayoutRenderer
                 . '</title></head><body><main><pre>'
                 . htmlspecialchars($e->getMessage())
                 . '</pre></main></body></html>';
+        } finally {
+            PageRenderContextStore::reset();
         }
     }
 

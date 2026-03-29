@@ -10,6 +10,7 @@ use Semitexa\Core\Response as CoreResponse;
 use Semitexa\Core\Server\SwooleBootstrap;
 use Semitexa\Ssr\Configuration\IsomorphicConfig;
 use Semitexa\Ssr\Context\IsomorphicContextStore;
+use Semitexa\Ssr\Context\PageRenderContextStore;
 use Semitexa\Ssr\Isomorphic\DeferredRequestRegistry;
 use Semitexa\Ssr\Isomorphic\DeferredTemplateRegistry;
 use Semitexa\Ssr\Isomorphic\PlaceholderRenderer;
@@ -92,10 +93,18 @@ class HtmlResponse extends GenericResponse
             $context['layout_handle'] ??= $handle;
         }
 
-        $context = $this->applyIsomorphicContext($context);
+        $context['response'] ??= $this;
 
-        $html = ModuleTemplateRegistry::getTwig()->render($tmpl, $context);
-        $this->setContent($html);
+        $context = $this->applyIsomorphicContext($context);
+        PageRenderContextStore::set($context);
+
+        try {
+            $html = ModuleTemplateRegistry::getTwig()->render($tmpl, $context);
+            $this->setContent($html);
+        } finally {
+            PageRenderContextStore::reset();
+        }
+
         return $this;
     }
 
@@ -265,7 +274,11 @@ class HtmlResponse extends GenericResponse
         $slotIds = array_map(static fn ($s) => $s->slotId, $deferredSlots);
         $serializableContext = self::sanitizeDeferredContext($context);
         $bindToken = bin2hex(random_bytes(16));
-        DeferredRequestRegistry::store($requestId, $handle, $serializableContext, $slotIds, $bindToken);
+        $locale = '';
+        if (class_exists(\Semitexa\Locale\Context\LocaleContextStore::class)) {
+            $locale = \Semitexa\Locale\Context\LocaleContextStore::getLocale();
+        }
+        DeferredRequestRegistry::store($requestId, $handle, $serializableContext, $slotIds, $bindToken, $locale);
 
         IsomorphicContextStore::setPageHandle($handle);
         IsomorphicContextStore::setDeferredSlots($deferredSlots);
@@ -292,8 +305,31 @@ class HtmlResponse extends GenericResponse
             return [];
         }
 
+        $excludedTopLevelKeys = [
+            'navSections',
+            'featureTree',
+            'sections',
+            'features',
+            'sourceCode',
+            'resultPreview',
+            'resultPreviewData',
+            'resultPreviewTemplate',
+            'l2Content',
+            'l2ContentData',
+            'l2ContentTemplate',
+            'l3Content',
+            'l3ContentData',
+            'l3ContentTemplate',
+            'explanation',
+            'relatedPayloads',
+        ];
+
         $sanitized = [];
         foreach ($context as $key => $value) {
+            if ($depth === 0 && is_string($key) && in_array($key, $excludedTopLevelKeys, true)) {
+                continue;
+            }
+
             if (is_array($value)) {
                 $sanitized[$key] = self::sanitizeDeferredContext($value, $depth + 1);
                 continue;

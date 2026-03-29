@@ -108,6 +108,37 @@ class LayoutSlotRegistry
     }
 
     /**
+     * @return array<string,array{deferred:bool}>
+     */
+    public static function describeSlotsForPage(string $pageHandle, ?string $layoutHandle = null): array
+    {
+        $description = [];
+
+        foreach ([self::GLOBAL_HANDLE, $layoutHandle, $pageHandle] as $handle) {
+            if ($handle === null || $handle === '') {
+                continue;
+            }
+
+            $handleKey = strtolower($handle);
+            foreach (self::$slots[$handleKey] ?? [] as $slotName => $entries) {
+                if (!isset($description[$slotName])) {
+                    $description[$slotName] = ['deferred' => false];
+                }
+
+                foreach ($entries as $entry) {
+                    if (($entry['deferred'] ?? false) === true) {
+                        $description[$slotName]['deferred'] = true;
+                    }
+                }
+            }
+        }
+
+        ksort($description);
+
+        return $description;
+    }
+
+    /**
      * Get all deferred slot definitions for a given page handle.
      *
      * @return DeferredSlotDefinition[]
@@ -144,6 +175,7 @@ class LayoutSlotRegistry
                     skeletonTemplate: $entry['skeletonTemplate'] ?? null,
                     refreshInterval: $entry['refreshInterval'] ?? 0,
                     resourceClass: $entry['resourceClass'] ?? null,
+                    clientModules: $entry['clientModules'] ?? [],
                 );
             }
         }
@@ -179,11 +211,40 @@ class LayoutSlotRegistry
                         skeletonTemplate: $entry['skeletonTemplate'] ?? null,
                         refreshInterval: $entry['refreshInterval'] ?? 0,
                         resourceClass: $entry['resourceClass'] ?? null,
+                        clientModules: $entry['clientModules'] ?? [],
                     );
                 }
             }
         }
 
         return $result;
+    }
+
+    /**
+     * Return unique client module refs declared by one deferred slot for a handle.
+     *
+     * @return string[]
+     */
+    public static function getDeferredClientModulesForSlot(string $handle, string $slot): array
+    {
+        $handleKey = strtolower($handle);
+        $slotKey = strtolower($slot);
+        $modules = [];
+
+        foreach ([self::GLOBAL_HANDLE, $handleKey] as $candidateHandle) {
+            foreach ((self::$slots[$candidateHandle][$slotKey] ?? []) as $entry) {
+                if (!($entry['deferred'] ?? false)) {
+                    continue;
+                }
+
+                foreach (($entry['clientModules'] ?? []) as $moduleRef) {
+                    if (is_string($moduleRef) && $moduleRef !== '') {
+                        $modules[] = $moduleRef;
+                    }
+                }
+            }
+        }
+
+        return array_values(array_unique($modules));
     }
 }

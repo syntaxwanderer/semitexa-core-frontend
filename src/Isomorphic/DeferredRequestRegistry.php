@@ -33,6 +33,7 @@ final class DeferredRequestRegistry
         $table->column('page_handle', Table::TYPE_STRING, 128);
         $table->column('page_context', Table::TYPE_STRING, $config->deferredContextSize);
         $table->column('bind_token', Table::TYPE_STRING, 64);
+        $table->column('locale', Table::TYPE_STRING, 16);
         $table->column('slots', Table::TYPE_STRING, 2048);
         $table->column('delivered', Table::TYPE_STRING, 2048);
         $table->column('created_at', Table::TYPE_INT);
@@ -80,6 +81,7 @@ final class DeferredRequestRegistry
         array $pageContext,
         array $slotIds,
         string $bindToken = '',
+        string $locale = '',
     ): void {
         if (self::$table === null) {
             $config = IsomorphicConfig::fromEnvironment();
@@ -125,6 +127,7 @@ final class DeferredRequestRegistry
             'page_handle' => $pageHandle,
             'page_context' => $serializedContext,
             'bind_token' => $bindToken,
+            'locale' => $locale,
             'slots' => $slotsJson,
             'delivered' => $deliveredJson,
             'created_at' => time(),
@@ -137,7 +140,7 @@ final class DeferredRequestRegistry
     /**
      * Consume a deferred request entry. Returns null if not found or expired.
      *
-     * @return array{page_handle: string, page_context: array, bind_token: string, slots: string[], delivered: string[]}|null
+     * @return array{page_handle: string, page_context: array, bind_token: string, locale: string, slots: string[], delivered: string[]}|null
      */
     public static function consume(string $requestId): ?array
     {
@@ -161,6 +164,7 @@ final class DeferredRequestRegistry
             'page_handle' => trim((string) $row['page_handle']),
             'page_context' => json_decode((string) $row['page_context'], true) ?: [],
             'bind_token' => trim((string) ($row['bind_token'] ?? '')),
+            'locale' => trim((string) ($row['locale'] ?? '')),
             'slots' => json_decode((string) $row['slots'], true) ?: [],
             'delivered' => json_decode((string) $row['delivered'], true) ?: [],
         ];
@@ -201,6 +205,7 @@ final class DeferredRequestRegistry
                 'page_handle' => $row['page_handle'],
                 'page_context' => $row['page_context'],
                 'bind_token' => $row['bind_token'] ?? '',
+                'locale' => $row['locale'] ?? '',
                 'slots' => $row['slots'],
                 'delivered' => $deliveredJson,
                 'created_at' => $row['created_at'],
