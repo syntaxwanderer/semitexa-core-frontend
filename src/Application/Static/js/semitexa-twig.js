@@ -442,6 +442,7 @@
             self._manifest = manifest;
             self._setBindCookie(manifest);
             self._deferredCompleted = false;
+            self._deferredLive = false;
             var sseUrl = '/__semitexa_kiss?session_id=' + encodeURIComponent(manifest.sessionId)
                 + '&deferred_request_id=' + encodeURIComponent(manifest.requestId);
 
@@ -466,6 +467,7 @@
                     var payload = JSON.parse(event.data);
                     if (payload.type === 'done') {
                         self._deferredCompleted = true;
+                        self._deferredLive = !!payload.live;
                         // Fallback for any blocks that never arrived
                         if (pendingSlots.size > 0) {
                             var missed = [];
@@ -495,9 +497,7 @@
             };
 
             es.onerror = function () {
-                if (self._deferredCompleted) {
-                    es.close();
-                    self._connected = false;
+                if (self._deferredCompleted && self._deferredLive) {
                     return;
                 }
                 es.close();

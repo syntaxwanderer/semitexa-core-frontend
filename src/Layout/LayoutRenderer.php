@@ -108,6 +108,8 @@ class LayoutRenderer
                 . '</title></head><body><main><pre>'
                 . htmlspecialchars($e->getMessage())
                 . '</pre></main></body></html>';
+        } finally {
+            PageRenderContextStore::reset();
         }
     }
 

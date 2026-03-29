@@ -189,6 +189,6 @@ final class AiSitemapJsonRenderer
 
     private static function absoluteUrl(string $path): string
     {
-        return rtrim(str_replace(AiSitemapLocator::PATH, '', AiSitemapLocator::absoluteUrl()), '/') . $path;
+        return AiSitemapLocator::originUrl() . '/' . ltrim($path, '/');
     }
 }

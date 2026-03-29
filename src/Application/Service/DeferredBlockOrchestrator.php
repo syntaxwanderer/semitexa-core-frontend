@@ -52,16 +52,6 @@ final class DeferredBlockOrchestrator
             'slots' => array_map(static fn ($s) => $s->slotId, $slots),
         ]);
 
-        if ($slots === []) {
-            SseAsyncResultDelivery::deliverRaw($sessionId, [
-                'type' => 'done',
-                'live' => false,
-                'close' => true,
-                'reconnect' => false,
-            ]);
-            return;
-        }
-
         $this->applyLocale($locale);
 
         // Determine already-delivered slots for reconnect scenario
@@ -83,12 +73,16 @@ final class DeferredBlockOrchestrator
         }
 
         if ($slots === []) {
+            $liveEnabled = $startLiveLoop && $persistentDeferredSse && $liveSlots !== [];
             SseAsyncResultDelivery::deliverRaw($sessionId, [
                 'type' => 'done',
-                'live' => false,
-                'close' => true,
-                'reconnect' => false,
+                'live' => $liveEnabled,
+                'close' => !$liveEnabled,
+                'reconnect' => $liveEnabled,
             ]);
+            if ($liveEnabled) {
+                $this->runLiveLoop($sessionId, $pageHandle, $pageContext, $liveSlots, $locale);
+            }
             return;
         }
 

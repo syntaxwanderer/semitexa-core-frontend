@@ -98,8 +98,13 @@ class HtmlResponse extends GenericResponse
         $context = $this->applyIsomorphicContext($context);
         PageRenderContextStore::set($context);
 
-        $html = ModuleTemplateRegistry::getTwig()->render($tmpl, $context);
-        $this->setContent($html);
+        try {
+            $html = ModuleTemplateRegistry::getTwig()->render($tmpl, $context);
+            $this->setContent($html);
+        } finally {
+            PageRenderContextStore::reset();
+        }
+
         return $this;
     }
 

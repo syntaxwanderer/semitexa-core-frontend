@@ -25,6 +25,11 @@ final class AiSitemapLocator
         return rtrim(self::resolveOrigin(), '/') . self::PATH;
     }
 
+    public static function originUrl(): string
+    {
+        return rtrim(self::resolveOrigin(), '/');
+    }
+
     private static function resolveOrigin(): string
     {
         $appUrl = trim((string) (Environment::getEnvValue('APP_URL') ?? ''));

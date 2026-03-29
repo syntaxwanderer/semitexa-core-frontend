@@ -171,7 +171,14 @@ final class AsyncResourceSseServer
         }
 
         // Flush RabbitMQ queue for this session (messages from any worker/server)
-        self::drainRabbitMqQueueForSession($sessionId, $response);
+        if (self::drainRabbitMqQueueForSession($sessionId, $response)) {
+            if (self::$sessionWorkerTable !== null) {
+                self::$sessionWorkerTable->del(self::sessionTableKey($sessionId));
+            }
+            unset(self::$sessions[$sessionId], self::$queues[$sessionId]);
+            $response->end();
+            return;
+        }
 
         // Send initial event so the client receives something immediately (fixes "Connecting..." stuck
         // and ensures response is flushed; some proxies don't send headers until first byte).

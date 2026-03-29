@@ -59,7 +59,15 @@ final class SemanticRenderer
 
         $schema = self::generateForResource($resource, $handle);
 
-        $html .= '<script type="application/ld+json">' . json_encode($schema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . '</script>';
+        $html .= '<script type="application/ld+json">' . json_encode(
+            $schema,
+            JSON_UNESCAPED_UNICODE
+            | JSON_UNESCAPED_SLASHES
+            | JSON_HEX_TAG
+            | JSON_HEX_AMP
+            | JSON_HEX_APOS
+            | JSON_HEX_QUOT
+        ) . '</script>';
 
         foreach (self::getDeclaredAlternates($context) as $alternate) {
             $html .= '<link rel="alternate" type="'
