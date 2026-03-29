@@ -313,7 +313,7 @@ final class AsyncResourceSseServer
 
         // Use coroutine to resolve deferred blocks concurrently
         if (class_exists(\Swoole\Coroutine::class, false) && \Swoole\Coroutine::getCid() > 0) {
-            \Swoole\Coroutine::create(static function () use ($sessionId, $registry, $lastEventId, $deferredRequestId, $debugLog): void {
+            \Swoole\Coroutine::create(static function () use ($sessionId, $registry, $lastEventId, $deferredRequestId, $debugLog, $allowPersistentDeferredSse): void {
                 try {
                     $container = ContainerFactory::get();
                     $orchestrator = $container->get(\Semitexa\Ssr\Application\Service\DeferredBlockOrchestrator::class);
