@@ -183,7 +183,12 @@ final class AsyncResourceSseServer
 
         // Send initial event so the client receives something immediately (fixes "Connecting..." stuck
         // and ensures response is flushed; some proxies don't send headers until first byte).
-        self::writeSse($response, ['connected' => true]);
+        self::writeSse($response, ['event' => 'connected', 'connected' => true]);
+
+        $demoStream = trim((string) ($request->get['demo_stream'] ?? ''));
+        if ($demoStream !== '') {
+            self::startDemoStreamProducer($sessionId, $demoStream);
+        }
 
         // Trigger deferred block streaming if deferred_request_id is present
         $deferredRequestId = trim((string) ($request->get['deferred_request_id'] ?? ''));
@@ -422,8 +427,79 @@ final class AsyncResourceSseServer
             $safeId = str_replace(["\r", "\n"], '', (string) $data['id']);
             $line .= 'id: ' . $safeId . "\n";
         }
+        if (isset($data['event']) && $data['event'] !== '') {
+            $safeEvent = str_replace(["\r", "\n"], '', (string) $data['event']);
+            $line .= 'event: ' . $safeEvent . "\n";
+        }
         $line .= "data: " . json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n\n";
         return @$response->write($line);
+    }
+
+    private static function startDemoStreamProducer(string $sessionId, string $demoStream): void
+    {
+        if ($demoStream !== 'showcase') {
+            return;
+        }
+
+        $producer = static function () use ($sessionId): void {
+            \Swoole\Coroutine::sleep(0.35);
+
+            if (!isset(self::$sessions[$sessionId])) {
+                return;
+            }
+
+            self::deliver($sessionId, [
+                'id' => 'demo_attached_' . substr(md5($sessionId), 0, 8),
+                'event' => 'notification',
+                'level' => 'info',
+                'title' => 'Stream attached',
+                'message' => 'The backend SSE stream is open. A new server-side minute tick will arrive every 60 seconds.',
+                'source' => 'swoole-worker',
+                'sent_at' => gmdate(DATE_ATOM),
+            ]);
+
+            $tick = 0;
+
+            while (isset(self::$sessions[$sessionId])) {
+                $now = microtime(true);
+                $sleepSeconds = 60 - fmod($now, 60.0);
+
+                if ($sleepSeconds < 0.05) {
+                    $sleepSeconds += 60.0;
+                }
+
+                \Swoole\Coroutine::sleep($sleepSeconds);
+
+                if (!isset(self::$sessions[$sessionId])) {
+                    return;
+                }
+
+                $tick++;
+                $sentAt = new \DateTimeImmutable('now');
+
+                self::deliver($sessionId, [
+                    'id' => 'demo_minute_' . $tick . '_' . substr(md5($sessionId), 0, 8),
+                    'event' => 'scheduler.tick',
+                    'level' => 'success',
+                    'title' => 'Minute boundary reached',
+                    'message' => sprintf(
+                        'Backend minute tick #%d emitted at %s. The countdown should now restart for the next full minute.',
+                        $tick,
+                        $sentAt->format('H:i:s')
+                    ),
+                    'source' => 'scheduler',
+                    'tick' => $tick,
+                    'sent_at' => $sentAt->format(DATE_ATOM),
+                ]);
+            }
+        };
+
+        if (class_exists(\Swoole\Coroutine::class, false) && \Swoole\Coroutine::getCid() > 0) {
+            \Swoole\Coroutine::create($producer);
+            return;
+        }
+
+        $producer();
     }
 
     private static function shouldCloseAfterPayload(array $data): bool
