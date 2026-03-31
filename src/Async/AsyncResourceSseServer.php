@@ -25,6 +25,9 @@ final class AsyncResourceSseServer
     /** @var array<string, list<array>> In-memory queue per session for the loop to send */
     private static array $queues = [];
 
+    /** @var array<string, bool> */
+    private static array $demoProducers = [];
+
     private static ?\Swoole\Http\Server $httpServer = null;
 
     /** @var \Swoole\Table|null session_id -> worker_id (for cross-worker deliver) */
@@ -109,7 +112,7 @@ final class AsyncResourceSseServer
         $response->header('Connection', 'keep-alive');
         $response->header('X-Accel-Buffering', 'no');
 
-        $sessionId = trim((string) ($request->get['session_id'] ?? uniqid('sse_', true)));
+        $sessionId = trim((string) (($request->get['session_id'] ?? null) ?: uniqid('sse_', true)));
 
         self::$sessions[$sessionId] = [
             'response' => $response,
@@ -185,8 +188,12 @@ final class AsyncResourceSseServer
         // and ensures response is flushed; some proxies don't send headers until first byte).
         self::writeSse($response, ['event' => 'connected', 'connected' => true]);
 
-        $demoStream = trim((string) ($request->get['demo_stream'] ?? ''));
-        if ($demoStream !== '') {
+        $demoStream = '';
+        if (is_array($request->get) && isset($request->get['demo_stream'])) {
+            $demoStream = trim((string) $request->get['demo_stream']);
+        }
+        $enableDemoStream = filter_var((string) (\getenv('APP_DEBUG') ?: ''), FILTER_VALIDATE_BOOLEAN);
+        if ($demoStream !== '' && $enableDemoStream) {
             self::startDemoStreamProducer($sessionId, $demoStream);
         }
 
@@ -273,6 +280,7 @@ final class AsyncResourceSseServer
         self::deleteRabbitMqQueueForSession($sessionId);
         unset(self::$sessions[$sessionId]);
         unset(self::$queues[$sessionId]);
+        unset(self::$demoProducers[$sessionId]);
         $response->end();
     }
 
@@ -285,7 +293,7 @@ final class AsyncResourceSseServer
     {
         $registry = \Semitexa\Ssr\Isomorphic\DeferredRequestRegistry::consume($deferredRequestId);
 
-        $debugEnabled = filter_var((string) (\getenv('APP_DEBUG') ?? \getenv('DEBUG') ?? '0'), \FILTER_VALIDATE_BOOLEAN);
+        $debugEnabled = filter_var((string) (\getenv('APP_DEBUG') ?: (\getenv('DEBUG') ?: '0')), \FILTER_VALIDATE_BOOLEAN);
         $debugLog = static function (string $msg, array $data = []) use ($debugEnabled): void {
             if (!$debugEnabled) {
                 return;
@@ -428,8 +436,7 @@ final class AsyncResourceSseServer
             $line .= 'id: ' . $safeId . "\n";
         }
         if (isset($data['event']) && $data['event'] !== '') {
-            $safeEvent = str_replace(["\r", "\n"], '', (string) $data['event']);
-            $line .= 'event: ' . $safeEvent . "\n";
+            $line .= "event: message\n";
         }
         $line .= "data: " . json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n\n";
         return @$response->write($line);
@@ -441,12 +448,21 @@ final class AsyncResourceSseServer
             return;
         }
 
+        if (isset(self::$demoProducers[$sessionId])) {
+            return;
+        }
+
+        self::$demoProducers[$sessionId] = true;
+
         $producer = static function () use ($sessionId): void {
             \Swoole\Coroutine::sleep(0.35);
 
             if (!isset(self::$sessions[$sessionId])) {
+                unset(self::$demoProducers[$sessionId]);
                 return;
             }
+
+            $utcNow = static fn (): \DateTimeImmutable => new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
 
             self::deliver($sessionId, [
                 'id' => 'demo_attached_' . substr(md5($sessionId), 0, 8),
@@ -455,7 +471,7 @@ final class AsyncResourceSseServer
                 'title' => 'Stream attached',
                 'message' => 'The backend SSE stream is open. A new server-side minute tick will arrive every 60 seconds.',
                 'source' => 'swoole-worker',
-                'sent_at' => gmdate(DATE_ATOM),
+                'sent_at' => $utcNow()->format(DATE_ATOM),
             ]);
 
             $tick = 0;
@@ -471,11 +487,12 @@ final class AsyncResourceSseServer
                 \Swoole\Coroutine::sleep($sleepSeconds);
 
                 if (!isset(self::$sessions[$sessionId])) {
+                    unset(self::$demoProducers[$sessionId]);
                     return;
                 }
 
                 $tick++;
-                $sentAt = new \DateTimeImmutable('now');
+                $sentAt = $utcNow();
 
                 self::deliver($sessionId, [
                     'id' => 'demo_minute_' . $tick . '_' . substr(md5($sessionId), 0, 8),
@@ -492,6 +509,8 @@ final class AsyncResourceSseServer
                     'sent_at' => $sentAt->format(DATE_ATOM),
                 ]);
             }
+
+            unset(self::$demoProducers[$sessionId]);
         };
 
         if (class_exists(\Swoole\Coroutine::class, false) && \Swoole\Coroutine::getCid() > 0) {
@@ -499,7 +518,7 @@ final class AsyncResourceSseServer
             return;
         }
 
-        $producer();
+        unset(self::$demoProducers[$sessionId]);
     }
 
     private static function shouldCloseAfterPayload(array $data): bool
@@ -724,7 +743,8 @@ final class AsyncResourceSseServer
         }
 
         foreach (['origin', 'referer'] as $headerName) {
-            $value = trim((string) (($request->header[$headerName] ?? '')));
+            $rawHeader = is_array($request->header) ? ($request->header[$headerName] ?? '') : '';
+            $value = is_scalar($rawHeader) ? trim((string) $rawHeader) : '';
             if ($value === '') {
                 continue;
             }
