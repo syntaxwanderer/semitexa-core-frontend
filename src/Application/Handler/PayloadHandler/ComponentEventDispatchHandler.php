@@ -191,7 +191,11 @@ final class ComponentEventDispatchHandler implements TypedHandlerInterface
             return false;
         }
 
-        $expectedPort = $expected['port'] ?? $this->defaultPortForScheme($actual['scheme']);
+        if ($expected['scheme'] === null || $actual['scheme'] === null || $expected['scheme'] !== $actual['scheme']) {
+            return false;
+        }
+
+        $expectedPort = $expected['port'] ?? $this->defaultPortForScheme($expected['scheme']);
         $actualPort = $actual['port'] ?? $this->defaultPortForScheme($actual['scheme']);
 
         return $expectedPort === $actualPort;

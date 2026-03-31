@@ -2,10 +2,12 @@
     'use strict';
 
     var boundCustomTriggers = new Set();
+    var triggerObserver = null;
 
     function init() {
         bindNativeTriggers();
         bindDeclaredCustomTriggers();
+        observeDeclaredCustomTriggers();
     }
 
     function bindNativeTriggers() {
@@ -49,6 +51,35 @@
             document.addEventListener(trigger, function (event) {
                 dispatchFromEvent(event, trigger);
             });
+        });
+    }
+
+    function observeDeclaredCustomTriggers() {
+        if (triggerObserver || typeof MutationObserver !== 'function') {
+            return;
+        }
+
+        triggerObserver = new MutationObserver(function (mutations) {
+            for (var i = 0; i < mutations.length; i += 1) {
+                var mutation = mutations[i];
+                for (var j = 0; j < mutation.addedNodes.length; j += 1) {
+                    var node = mutation.addedNodes[j];
+                    if (!(node instanceof Element)) {
+                        continue;
+                    }
+
+                    if (node.hasAttribute('data-semitexa-component-event')
+                        || node.querySelector('[data-semitexa-component-event]')) {
+                        bindDeclaredCustomTriggers();
+                        return;
+                    }
+                }
+            }
+        });
+
+        triggerObserver.observe(document.documentElement, {
+            childList: true,
+            subtree: true
         });
     }
 
@@ -123,9 +154,10 @@
         })
         .then(function (response) {
             return response.json().catch(function () {
-                return {
+                throw {
                     status: 'error',
-                    reason: 'Component event endpoint returned invalid JSON.'
+                    reason: 'Component event endpoint returned invalid JSON.',
+                    http_status: response.status
                 };
             }).then(function (data) {
                 data.http_status = response.status;
