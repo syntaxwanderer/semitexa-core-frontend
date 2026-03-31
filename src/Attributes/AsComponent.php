@@ -14,5 +14,9 @@ class AsComponent
         public ?string $template = null,
         public ?string $layout = null,
         public bool $cacheable = true,
+        public ?string $event = null,
+        /** @var list<string> */
+        public array $triggers = [],
+        public ?string $script = null,
     ) {}
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Ssr\Component;
 
+use Semitexa\Ssr\Asset\AssetCollectorStore;
 use Semitexa\Ssr\Template\ModuleTemplateRegistry;
 
 final class ComponentRenderer
@@ -23,15 +24,44 @@ final class ComponentRenderer
 
         try {
             $template = $component['template'] ?? "components/{$name}.html.twig";
+            $manifest = null;
+            $componentId = null;
+
+            if (($component['event'] ?? null) !== null || ($component['script'] ?? null) !== null) {
+                $componentId = 'cmp_' . bin2hex(random_bytes(8));
+            }
+
+            if (($component['event'] ?? null) !== null) {
+                $manifest = ComponentEventBridge::buildManifest($component, $componentId);
+            }
+
+            if (class_exists(AssetCollectorStore::class)) {
+                $collector = AssetCollectorStore::get();
+
+                if (($component['event'] ?? null) !== null) {
+                    $collector->require('ssr:js:component-events');
+                }
+
+                if (($component['script'] ?? null) !== null) {
+                    $collector->require('ssr:js:component-runtime');
+                    $collector->require((string) $component['script']);
+                }
+            }
 
             $context = array_merge($props, [
                 '_component' => $component,
+                '_component_event_manifest' => $manifest,
+                '_component_id' => $componentId,
                 '_slots' => $slots,
             ]);
 
             $html = ModuleTemplateRegistry::getTwig()->render($template, $context);
 
             $html = self::processNestedComponents($html);
+
+            if ($componentId !== null) {
+                $html = ComponentEventBridge::annotateRoot($html, $component, $componentId, $manifest);
+            }
 
             return $html;
         } finally {

@@ -263,6 +263,17 @@ final class ModuleTemplateRegistry
                 },
                 ['needs_context' => true, 'is_safe' => ['html']]
             ));
+
+            self::$twig->addFunction(new TwigFunction(
+                'component_event_attrs',
+                function (array $context, string $trigger, array $payload = []) {
+                    return new \Twig\Markup(
+                        \Semitexa\Ssr\Component\ComponentEventBridge::renderTriggerAttributes($context, $trigger, $payload),
+                        'UTF-8'
+                    );
+                },
+                ['needs_context' => true, 'is_safe' => ['html']]
+            ));
         }
 
         // SEO functions - page_title, meta
