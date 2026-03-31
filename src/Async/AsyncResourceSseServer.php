@@ -25,6 +25,9 @@ final class AsyncResourceSseServer
     /** @var array<string, list<array>> In-memory queue per session for the loop to send */
     private static array $queues = [];
 
+    /** @var array<string, bool> */
+    private static array $demoProducers = [];
+
     private static ?\Swoole\Http\Server $httpServer = null;
 
     /** @var \Swoole\Table|null session_id -> worker_id (for cross-worker deliver) */
@@ -109,7 +112,7 @@ final class AsyncResourceSseServer
         $response->header('Connection', 'keep-alive');
         $response->header('X-Accel-Buffering', 'no');
 
-        $sessionId = trim((string) ($request->get['session_id'] ?? uniqid('sse_', true)));
+        $sessionId = trim((string) (($request->get['session_id'] ?? null) ?: uniqid('sse_', true)));
 
         self::$sessions[$sessionId] = [
             'response' => $response,
@@ -183,7 +186,16 @@ final class AsyncResourceSseServer
 
         // Send initial event so the client receives something immediately (fixes "Connecting..." stuck
         // and ensures response is flushed; some proxies don't send headers until first byte).
-        self::writeSse($response, ['connected' => true]);
+        self::writeSse($response, ['event' => 'connected', 'connected' => true]);
+
+        $demoStream = '';
+        if (is_array($request->get) && isset($request->get['demo_stream'])) {
+            $demoStream = trim((string) $request->get['demo_stream']);
+        }
+        $enableDemoStream = filter_var((string) (\getenv('APP_DEBUG') ?: ''), FILTER_VALIDATE_BOOLEAN);
+        if ($demoStream !== '' && $enableDemoStream) {
+            self::startDemoStreamProducer($sessionId, $demoStream);
+        }
 
         // Trigger deferred block streaming if deferred_request_id is present
         $deferredRequestId = trim((string) ($request->get['deferred_request_id'] ?? ''));
@@ -268,6 +280,7 @@ final class AsyncResourceSseServer
         self::deleteRabbitMqQueueForSession($sessionId);
         unset(self::$sessions[$sessionId]);
         unset(self::$queues[$sessionId]);
+        unset(self::$demoProducers[$sessionId]);
         $response->end();
     }
 
@@ -280,7 +293,7 @@ final class AsyncResourceSseServer
     {
         $registry = \Semitexa\Ssr\Isomorphic\DeferredRequestRegistry::consume($deferredRequestId);
 
-        $debugEnabled = filter_var((string) (\getenv('APP_DEBUG') ?? \getenv('DEBUG') ?? '0'), \FILTER_VALIDATE_BOOLEAN);
+        $debugEnabled = filter_var((string) (\getenv('APP_DEBUG') ?: (\getenv('DEBUG') ?: '0')), \FILTER_VALIDATE_BOOLEAN);
         $debugLog = static function (string $msg, array $data = []) use ($debugEnabled): void {
             if (!$debugEnabled) {
                 return;
@@ -422,8 +435,90 @@ final class AsyncResourceSseServer
             $safeId = str_replace(["\r", "\n"], '', (string) $data['id']);
             $line .= 'id: ' . $safeId . "\n";
         }
+        if (isset($data['event']) && $data['event'] !== '') {
+            $line .= "event: message\n";
+        }
         $line .= "data: " . json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n\n";
         return @$response->write($line);
+    }
+
+    private static function startDemoStreamProducer(string $sessionId, string $demoStream): void
+    {
+        if ($demoStream !== 'showcase') {
+            return;
+        }
+
+        if (isset(self::$demoProducers[$sessionId])) {
+            return;
+        }
+
+        self::$demoProducers[$sessionId] = true;
+
+        $producer = static function () use ($sessionId): void {
+            \Swoole\Coroutine::sleep(0.35);
+
+            if (!isset(self::$sessions[$sessionId])) {
+                unset(self::$demoProducers[$sessionId]);
+                return;
+            }
+
+            $utcNow = static fn (): \DateTimeImmutable => new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+
+            self::deliver($sessionId, [
+                'id' => 'demo_attached_' . substr(md5($sessionId), 0, 8),
+                'event' => 'notification',
+                'level' => 'info',
+                'title' => 'Stream attached',
+                'message' => 'The backend SSE stream is open. A new server-side minute tick will arrive every 60 seconds.',
+                'source' => 'swoole-worker',
+                'sent_at' => $utcNow()->format(DATE_ATOM),
+            ]);
+
+            $tick = 0;
+
+            while (isset(self::$sessions[$sessionId])) {
+                $now = microtime(true);
+                $sleepSeconds = 60 - fmod($now, 60.0);
+
+                if ($sleepSeconds < 0.05) {
+                    $sleepSeconds += 60.0;
+                }
+
+                \Swoole\Coroutine::sleep($sleepSeconds);
+
+                if (!isset(self::$sessions[$sessionId])) {
+                    unset(self::$demoProducers[$sessionId]);
+                    return;
+                }
+
+                $tick++;
+                $sentAt = $utcNow();
+
+                self::deliver($sessionId, [
+                    'id' => 'demo_minute_' . $tick . '_' . substr(md5($sessionId), 0, 8),
+                    'event' => 'scheduler.tick',
+                    'level' => 'success',
+                    'title' => 'Minute boundary reached',
+                    'message' => sprintf(
+                        'Backend minute tick #%d emitted at %s. The countdown should now restart for the next full minute.',
+                        $tick,
+                        $sentAt->format('H:i:s')
+                    ),
+                    'source' => 'scheduler',
+                    'tick' => $tick,
+                    'sent_at' => $sentAt->format(DATE_ATOM),
+                ]);
+            }
+
+            unset(self::$demoProducers[$sessionId]);
+        };
+
+        if (class_exists(\Swoole\Coroutine::class, false) && \Swoole\Coroutine::getCid() > 0) {
+            \Swoole\Coroutine::create($producer);
+            return;
+        }
+
+        unset(self::$demoProducers[$sessionId]);
     }
 
     private static function shouldCloseAfterPayload(array $data): bool
@@ -648,7 +743,8 @@ final class AsyncResourceSseServer
         }
 
         foreach (['origin', 'referer'] as $headerName) {
-            $value = trim((string) (($request->header[$headerName] ?? '')));
+            $rawHeader = is_array($request->header) ? ($request->header[$headerName] ?? '') : '';
+            $value = is_scalar($rawHeader) ? trim((string) $rawHeader) : '';
             if ($value === '') {
                 continue;
             }
