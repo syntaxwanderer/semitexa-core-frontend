@@ -1,40 +1,39 @@
 {
-    "name": "semitexa/ssr",
-    "description": "Semitexa SSR - Twig-based server rendering with components, layouts, assets, and deferred slots",
-    "version": "v1.0.32",
-    "type": "semitexa-module",
-    "license": "MIT",
-    "authors": [
-        {
-            "name": "Semitexa",
-            "email": "support@semitexa.com"
-        }
-    ],
-    "require": {
-        "php": "^8.4",
-        "twig/twig": "^3.10",
-        "semitexa/locale": "*",
-        "semitexa/tenancy": "*"
-    },
-    "autoload": {
-        "psr-4": {
-            "Semitexa\\Ssr\\": "src/"
-        }
-    },
-    "extra": {
-        "semitexa-module": {
-            "name": "core-frontend",
-            "description": "Server-Side Rendering capabilities using Twig"
-        }
-    },
-    "keywords": [
-        "semitexa",
-        "ssr",
-        "twig",
-        "rendering",
-        "frontend",
-        "components",
-        "layouts",
-        "deferred"
-    ]
+  "name": "semitexa/ssr",
+  "description": "Semitexa SSR - Twig-based server rendering with components, layouts, assets, and deferred slots",
+  "type": "semitexa-module",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Semitexa",
+      "email": "support@semitexa.com"
+    }
+  ],
+  "require": {
+    "php": "^8.4",
+    "twig/twig": "^3.10",
+    "semitexa/locale": "*",
+    "semitexa/tenancy": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "Semitexa\\Ssr\\": "src/"
+    }
+  },
+  "extra": {
+    "semitexa-module": {
+      "name": "core-frontend",
+      "description": "Server-Side Rendering capabilities using Twig"
+    }
+  },
+  "keywords": [
+    "semitexa",
+    "ssr",
+    "twig",
+    "rendering",
+    "frontend",
+    "components",
+    "layouts",
+    "deferred"
+  ]
 }
