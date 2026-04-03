@@ -136,6 +136,7 @@ final class ModuleTemplateRegistry
     private static function buildTwigLoader(): void
     {
         $loader = new FilesystemLoader();
+        $namespaceOwners = [];
 
         // Register both theme and module paths per namespace — theme first, module as fallback.
         // Twig searches registered paths in registration order, so theme overrides are transparent.
@@ -150,10 +151,18 @@ final class ModuleTemplateRegistry
             );
 
             foreach ($aliases as $alias) {
-                if (isset(self::$themePaths[$module])) {
-                    $loader->addPath(self::$themePaths[$module], self::aliasForModule($alias));
+                $namespace = self::aliasForModule($alias);
+                $owner = $namespaceOwners[$namespace] ?? null;
+                if (is_string($owner) && $owner !== $module) {
+                    continue;
                 }
-                $loader->addPath($config['path'], self::aliasForModule($alias));
+
+                $namespaceOwners[$namespace] = $module;
+
+                if (isset(self::$themePaths[$module])) {
+                    $loader->addPath(self::$themePaths[$module], $namespace);
+                }
+                $loader->addPath($config['path'], $namespace);
             }
         }
 
