@@ -78,10 +78,19 @@ final class ModuleTemplateRegistry
 
         $modules = ModuleRegistry::getModules();
         foreach ($modules as $module) {
+            if (!is_array($module)) {
+                continue;
+            }
+
             $templatePaths = $module['templatePaths'] ?? [];
             foreach ($templatePaths as $path) {
                 if (is_dir($path)) {
-                    self::$modulePaths[$module['name']] = [
+                    $moduleName = is_string($module['name'] ?? null) ? $module['name'] : '';
+                    if ($moduleName === '') {
+                        continue;
+                    }
+
+                    self::$modulePaths[$moduleName] = [
                         'aliases' => self::aliasesForRegisteredModule($module),
                         'path' => $path,
                         'type' => 'package',
@@ -131,7 +140,14 @@ final class ModuleTemplateRegistry
         // Register both theme and module paths per namespace — theme first, module as fallback.
         // Twig searches registered paths in registration order, so theme overrides are transparent.
         foreach (self::$modulePaths as $module => $config) {
-            $aliases = self::normalizeAliases($config['aliases'] ?? [$module], $module);
+            if (!is_array($config)) {
+                continue;
+            }
+
+            $aliases = self::normalizeAliases(
+                isset($config['aliases']) && is_array($config['aliases']) ? $config['aliases'] : [$module],
+                $module,
+            );
 
             foreach ($aliases as $alias) {
                 if (isset(self::$themePaths[$module])) {
@@ -183,7 +199,7 @@ final class ModuleTemplateRegistry
     }
 
     /**
-     * @param list<mixed> $aliases
+     * @param array<mixed> $aliases
      * @return list<string>
      */
     private static function normalizeAliases(array $aliases, string $name): array
