@@ -20,7 +20,7 @@ final class HandlerCompletedListener
     {
         $sessionId = $this->session->get('semitexa_sse_session');
 
-        if (!$sessionId) {
+        if (!is_string($sessionId) || trim($sessionId) === '') {
             return;
         }
 

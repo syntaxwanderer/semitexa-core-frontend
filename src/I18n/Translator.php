@@ -102,6 +102,10 @@ final class Translator
             return $ctx;
         }
 
+        if (self::$localeContext === null) {
+            self::$localeContext = self::resolveLocaleContext();
+        }
+
         // Clone the boot-time context so mutations are coroutine-local.
         $cloned = clone self::$localeContext;
         CoroutineLocal::set(self::CTX_LOCALE, $cloned);

@@ -93,6 +93,16 @@ final class ComponentRenderer
     public static function getSlot(string $componentName, string $slotName, array $default = []): array
     {
         $slots = CoroutineLocal::get(self::CTX_RENDERED_SLOTS, []);
-        return $slots[$componentName][$slotName] ?? $default;
+        if (!is_array($slots)) {
+            return $default;
+        }
+
+        $componentSlots = $slots[$componentName] ?? null;
+        if (!is_array($componentSlots)) {
+            return $default;
+        }
+
+        $slot = $componentSlots[$slotName] ?? null;
+        return is_array($slot) ? $slot : $default;
     }
 }

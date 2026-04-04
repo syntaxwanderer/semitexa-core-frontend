@@ -729,7 +729,14 @@ final class AsyncResourceSseServer
     {
         $redisHost = Environment::getEnvValue('REDIS_HOST');
         if ($redisHost !== null && $redisHost !== '') {
-            return new RedisSessionHandler();
+            $pool = new \Semitexa\Core\Redis\RedisConnectionPool(1, [
+                'scheme' => (string) (Environment::getEnvValue('REDIS_SCHEME', 'tcp') ?? 'tcp'),
+                'host' => $redisHost,
+                'port' => (int) (Environment::getEnvValue('REDIS_PORT', '6379') ?? '6379'),
+                'password' => (string) (Environment::getEnvValue('REDIS_PASSWORD', '') ?? ''),
+            ]);
+
+            return new RedisSessionHandler($pool);
         }
 
         return new SwooleTableSessionHandler();
