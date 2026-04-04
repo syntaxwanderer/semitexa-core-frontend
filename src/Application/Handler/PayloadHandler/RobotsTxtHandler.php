@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Semitexa\Ssr\Application\Handler\PayloadHandler;
 
 use Semitexa\Core\Attributes\AsPayloadHandler;
+use Semitexa\Core\Attributes\InjectAsReadonly;
 use Semitexa\Core\Contract\TypedHandlerInterface;
 use Semitexa\Core\Http\Response\GenericResponse;
+use Semitexa\Core\Request;
 use Semitexa\Core\Util\ProjectRoot;
 use Semitexa\Ssr\Application\Payload\Request\RobotsTxtPayload;
 use Semitexa\Ssr\Seo\RobotsTxtRenderer;
@@ -14,6 +16,9 @@ use Semitexa\Ssr\Seo\RobotsTxtRenderer;
 #[AsPayloadHandler(payload: RobotsTxtPayload::class, resource: GenericResponse::class)]
 final class RobotsTxtHandler implements TypedHandlerInterface
 {
+    #[InjectAsReadonly]
+    protected Request $request;
+
     public function handle(RobotsTxtPayload $payload, GenericResponse $resource): GenericResponse
     {
         return $resource
@@ -36,6 +41,6 @@ final class RobotsTxtHandler implements TypedHandlerInterface
             }
         }
 
-        return RobotsTxtRenderer::render();
+        return RobotsTxtRenderer::render($this->request);
     }
 }

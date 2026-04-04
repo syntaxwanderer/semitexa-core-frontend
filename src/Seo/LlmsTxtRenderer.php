@@ -5,18 +5,19 @@ declare(strict_types=1);
 namespace Semitexa\Ssr\Seo;
 
 use Semitexa\Core\Environment;
+use Semitexa\Core\Request;
 
 final class LlmsTxtRenderer
 {
-    public static function render(): string
+    public static function render(?Request $request = null): string
     {
         $appName = trim((string) (Environment::getEnvValue('APP_NAME') ?? ''));
         if ($appName === '') {
             $appName = 'Semitexa site';
         }
 
-        $origin = AiSitemapLocator::originUrl();
-        $sitemapJson = AiSitemapLocator::absoluteUrl();
+        $origin = AiSitemapLocator::originUrl($request);
+        $sitemapJson = AiSitemapLocator::absoluteUrl($request);
         $robotsTxt = $origin . '/robots.txt';
         $llmsTxt = $origin . '/llms.txt';
 

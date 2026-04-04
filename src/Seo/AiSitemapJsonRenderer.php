@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace Semitexa\Ssr\Seo;
 
 use Semitexa\Core\Discovery\AttributeDiscovery;
+use Semitexa\Core\Request;
 
 final class AiSitemapJsonRenderer
 {
-    public static function render(): string
+    public static function render(?Request $request = null): string
     {
         return json_encode(
-            self::buildDocument(),
+            self::buildDocument($request),
             JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
         );
     }
@@ -19,7 +20,7 @@ final class AiSitemapJsonRenderer
     /**
      * @return array<string, mixed>
      */
-    public static function buildDocument(): array
+    public static function buildDocument(?Request $request = null): array
     {
         AttributeDiscovery::initialize();
 
@@ -36,7 +37,7 @@ final class AiSitemapJsonRenderer
             }
 
             $path = (string) $route['path'];
-            $entry = self::buildRouteEntry($route, $path);
+            $entry = self::buildRouteEntry($route, $path, $request);
 
             if (self::isTemplatedPath($path)) {
                 $templates[] = $entry + [
@@ -58,9 +59,9 @@ final class AiSitemapJsonRenderer
             'version' => '1.0',
             'generated_at' => gmdate(DATE_ATOM),
             'site' => [
-                'ai_sitemap' => AiSitemapLocator::absoluteUrl(),
-                'robots' => self::absoluteUrl('/robots.txt'),
-                'llms' => self::absoluteUrl('/llms.txt'),
+                'ai_sitemap' => AiSitemapLocator::absoluteUrl($request),
+                'robots' => self::absoluteUrl('/robots.txt', $request),
+                'llms' => self::absoluteUrl('/llms.txt', $request),
             ],
             'hints' => [
                 'purpose' => 'Crawler-oriented route inventory for LLMs and other machine agents.',
@@ -80,16 +81,16 @@ final class AiSitemapJsonRenderer
      * @param array<string, mixed> $route
      * @return array<string, mixed>
      */
-    private static function buildRouteEntry(array $route, string $path): array
+    private static function buildRouteEntry(array $route, string $path, ?Request $request = null): array
     {
         return [
             'path' => $path,
-            'url' => self::absoluteUrl($path),
+            'url' => self::absoluteUrl($path, $request),
             'route_name' => $route['name'] ?? null,
             'methods' => self::normalizeMethods($route),
             'payload_class' => $route['class'] ?? null,
             'alternates' => [
-                'json' => self::absoluteUrl($path) . '?_format=json',
+                'json' => self::absoluteUrl($path, $request) . '?_format=json',
             ],
             'content_types' => self::normalizeProduces($route),
         ];
@@ -188,8 +189,8 @@ final class AiSitemapJsonRenderer
         ));
     }
 
-    private static function absoluteUrl(string $path): string
+    private static function absoluteUrl(string $path, ?Request $request = null): string
     {
-        return AiSitemapLocator::originUrl() . '/' . ltrim($path, '/');
+        return AiSitemapLocator::originUrl($request) . '/' . ltrim($path, '/');
     }
 }

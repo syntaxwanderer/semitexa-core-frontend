@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Semitexa\Ssr\Seo;
 
 use Semitexa\Core\Environment;
+use Semitexa\Core\Request;
 
 final class AiSitemapLocator
 {
@@ -15,23 +16,28 @@ final class AiSitemapLocator
         return self::PATH;
     }
 
-    public static function absoluteUrl(): string
+    public static function absoluteUrl(?Request $request = null): string
     {
         $override = trim((string) (Environment::getEnvValue('AI_SITEMAP_URL') ?? ''));
         if ($override !== '') {
             return $override;
         }
 
-        return rtrim(self::resolveOrigin(), '/') . self::PATH;
+        return rtrim(self::resolveOrigin($request), '/') . self::PATH;
     }
 
-    public static function originUrl(): string
+    public static function originUrl(?Request $request = null): string
     {
-        return rtrim(self::resolveOrigin(), '/');
+        return rtrim(self::resolveOrigin($request), '/');
     }
 
-    private static function resolveOrigin(): string
+    private static function resolveOrigin(?Request $request = null): string
     {
+        $requestOrigin = self::resolveOriginFromRequest($request);
+        if ($requestOrigin !== null) {
+            return $requestOrigin;
+        }
+
         $appUrl = trim((string) (Environment::getEnvValue('APP_URL') ?? ''));
         if ($appUrl !== '') {
             return $appUrl;
@@ -55,6 +61,34 @@ final class AiSitemapLocator
         }
 
         return sprintf('%s://%s:%d', $scheme, $host, $port);
+    }
+
+    private static function resolveOriginFromRequest(?Request $request): ?string
+    {
+        if (!$request instanceof Request) {
+            return null;
+        }
+
+        $hostHeader = trim((string) ($request->getHeader('X-Forwarded-Host') ?? $request->getHeader('Host') ?? ''));
+        if ($hostHeader === '') {
+            return null;
+        }
+
+        $scheme = trim((string) ($request->getHeader('X-Forwarded-Proto') ?? ''));
+        if ($scheme === '') {
+            $https = strtolower($request->getServer('https'));
+            $scheme = ($https === 'on' || $https === '1') ? 'https' : '';
+        }
+        if ($scheme === '') {
+            $scheme = trim((string) (Environment::getEnvValue('APP_SCHEME') ?? 'http'));
+        }
+
+        $host = trim(explode(',', $hostHeader)[0] ?? $hostHeader);
+        if ($host === '') {
+            return null;
+        }
+
+        return sprintf('%s://%s', $scheme, $host);
     }
 
     private static function resolvePort(): ?int

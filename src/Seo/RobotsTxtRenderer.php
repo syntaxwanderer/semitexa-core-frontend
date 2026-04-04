@@ -5,18 +5,19 @@ declare(strict_types=1);
 namespace Semitexa\Ssr\Seo;
 
 use Semitexa\Core\Environment;
+use Semitexa\Core\Request;
 
 final class RobotsTxtRenderer
 {
-    public static function render(): string
+    public static function render(?Request $request = null): string
     {
         $lines = [
             'User-agent: *',
             'Allow: /',
             '',
             '# Semitexa crawler hints',
-            '# LLMS: ' . AiSitemapLocator::originUrl() . '/llms.txt',
-            '# AI sitemap: ' . AiSitemapLocator::absoluteUrl(),
+            '# LLMS: ' . AiSitemapLocator::originUrl($request) . '/llms.txt',
+            '# AI sitemap: ' . AiSitemapLocator::absoluteUrl($request),
             '# HTML pages may expose a machine-readable alternate JSON document.',
             '# Try the same page with ?_format=json when you want page/meta/slot IRIs.',
             '# Slot documents are addressable with ?_format=json&_slot=<name>.',
