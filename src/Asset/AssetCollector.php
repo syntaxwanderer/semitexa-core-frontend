@@ -21,10 +21,12 @@ use Semitexa\Core\ModuleRegistry;
  */
 final class AssetCollector
 {
-    /** @var array<string, AssetEntry> Boot-time declarations keyed by canonical asset key */
+    /** @worker-scoped Boot-time declarations keyed by canonical asset key. Immutable after boot(). */
     private static array $declarations = [];
 
+    /** @worker-scoped */
     private static bool $booted = false;
+    /** @worker-scoped */
     private static ?ModuleRegistry $moduleRegistry = null;
 
     public static function setModuleRegistry(ModuleRegistry $moduleRegistry): void

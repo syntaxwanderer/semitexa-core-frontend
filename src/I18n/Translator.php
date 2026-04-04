@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Semitexa\Ssr\I18n;
 
 use Semitexa\Core\Locale\LocaleContextInterface;
+use Semitexa\Core\Support\CoroutineLocal;
 use Semitexa\Core\Support\ProjectRoot;
 use Semitexa\Locale\Context\LocaleManager;
 use Semitexa\Locale\I18n\Loader\JsonFileLoader;
@@ -21,8 +22,13 @@ use Semitexa\Locale\I18n\TranslationService;
  */
 final class Translator
 {
+    private const CTX_LOCALE = '__ssr_translator_locale_context';
+
+    /** @worker-scoped Set once at boot. */
     private static ?TranslationService $service = null;
+    /** @worker-scoped Boot-time locale context (used as default). */
     private static ?LocaleContextInterface $localeContext = null;
+    /** @worker-scoped */
     private static bool $initialized = false;
 
     /**
@@ -60,28 +66,47 @@ final class Translator
     {
         self::initialize();
 
-        return self::$service->trans($key, $params);
+        return self::$service->trans($key, $params, self::getRequestLocaleContext()->getLocale());
     }
 
     public static function transChoice(string $key, int $count, array $params = []): string
     {
         self::initialize();
 
-        return self::$service->transChoice($key, $count, $params);
+        return self::$service->transChoice($key, $count, $params, self::getRequestLocaleContext()->getLocale());
     }
 
     public static function setLocale(string $locale): void
     {
         self::initialize();
 
-        self::$localeContext->setLocale($locale);
+        $ctx = self::getRequestLocaleContext();
+        $ctx->setLocale($locale);
     }
 
     public static function getLocale(): string
     {
         self::initialize();
 
-        return self::$localeContext->getLocale();
+        return self::getRequestLocaleContext()->getLocale();
+    }
+
+    /**
+     * Get the locale context for the current request/coroutine.
+     * In Swoole, each coroutine gets its own clone to prevent cross-request locale leaks.
+     */
+    private static function getRequestLocaleContext(): LocaleContextInterface
+    {
+        $ctx = CoroutineLocal::get(self::CTX_LOCALE);
+        if ($ctx instanceof LocaleContextInterface) {
+            return $ctx;
+        }
+
+        // Clone the boot-time context so mutations are coroutine-local.
+        $cloned = clone self::$localeContext;
+        CoroutineLocal::set(self::CTX_LOCALE, $cloned);
+
+        return $cloned;
     }
 
     /**

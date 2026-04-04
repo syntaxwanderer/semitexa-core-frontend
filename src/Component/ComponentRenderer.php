@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace Semitexa\Ssr\Component;
 
+use Semitexa\Core\Support\CoroutineLocal;
 use Semitexa\Ssr\Asset\AssetCollectorStore;
 use Semitexa\Ssr\Template\ModuleTemplateRegistry;
 
 final class ComponentRenderer
 {
-    private static array $renderedSlots = [];
+    private const CTX_RENDERED_SLOTS = '__ssr_rendered_slots';
 
     /**
      * @param array<array-key, mixed> $props
@@ -24,8 +25,10 @@ final class ComponentRenderer
         }
 
         /** @var array{class: string, name: string, template: ?string, layout: ?string, cacheable: bool, event: ?string, triggers: list<string>, script: ?string} $component */
-        $previousSlots = self::$renderedSlots;
-        self::$renderedSlots[$name] = $slots;
+        $currentSlots = CoroutineLocal::get(self::CTX_RENDERED_SLOTS, []);
+        $previousSlots = $currentSlots;
+        $currentSlots[$name] = $slots;
+        CoroutineLocal::set(self::CTX_RENDERED_SLOTS, $currentSlots);
 
         try {
             $template = $component['template'] ?? "components/{$name}.html.twig";
@@ -68,7 +71,7 @@ final class ComponentRenderer
 
             return $html;
         } finally {
-            self::$renderedSlots = $previousSlots;
+            CoroutineLocal::set(self::CTX_RENDERED_SLOTS, $previousSlots);
         }
     }
 
@@ -89,6 +92,7 @@ final class ComponentRenderer
 
     public static function getSlot(string $componentName, string $slotName, array $default = []): array
     {
-        return self::$renderedSlots[$componentName][$slotName] ?? $default;
+        $slots = CoroutineLocal::get(self::CTX_RENDERED_SLOTS, []);
+        return $slots[$componentName][$slotName] ?? $default;
     }
 }
