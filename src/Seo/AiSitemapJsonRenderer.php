@@ -60,6 +60,7 @@ final class AiSitemapJsonRenderer
             'site' => [
                 'ai_sitemap' => AiSitemapLocator::absoluteUrl(),
                 'robots' => self::absoluteUrl('/robots.txt'),
+                'llms' => self::absoluteUrl('/llms.txt'),
             ],
             'hints' => [
                 'purpose' => 'Crawler-oriented route inventory for LLMs and other machine agents.',
@@ -108,7 +109,7 @@ final class AiSitemapJsonRenderer
             return false;
         }
 
-        if (in_array($path, ['/robots.txt', AiSitemapLocator::PATH], true)) {
+        if (in_array($path, ['/robots.txt', '/llms.txt', AiSitemapLocator::PATH], true)) {
             return false;
         }
 

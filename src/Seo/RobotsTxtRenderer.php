@@ -15,6 +15,7 @@ final class RobotsTxtRenderer
             'Allow: /',
             '',
             '# Semitexa crawler hints',
+            '# LLMS: ' . AiSitemapLocator::originUrl() . '/llms.txt',
             '# AI sitemap: ' . AiSitemapLocator::absoluteUrl(),
             '# HTML pages may expose a machine-readable alternate JSON document.',
             '# Try the same page with ?_format=json when you want page/meta/slot IRIs.',
