@@ -12,6 +12,7 @@ class LayoutSlotRegistry
     public const GLOBAL_HANDLE = '*';
 
     /**
+     * @worker-scoped Populated at boot by AttributeDiscovery, read-only during requests.
      * handle => slot => list of { template, context, priority, ... }
      * @var array<string, array<string, array<int, array{template:string, context:array, priority:int, deferred:bool, cacheTtl:int, dataProvider:?string, skeletonTemplate:?string, mode:string, refreshInterval:int, resourceClass:?string, clientModules:array}>>>
      */

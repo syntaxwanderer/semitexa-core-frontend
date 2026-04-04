@@ -106,7 +106,8 @@ final class AiSitemapLocator
             $scheme = trim((string) (Environment::getEnvValue('APP_SCHEME') ?? 'http'));
         }
 
-        $host = trim(explode(',', $hostHeader)[0] ?? $hostHeader);
+        $hostParts = explode(',', $hostHeader);
+        $host = trim($hostParts[0]);
         if ($host === '') {
             return null;
         }

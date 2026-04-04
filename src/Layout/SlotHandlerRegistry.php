@@ -11,6 +11,7 @@ namespace Semitexa\Ssr\Layout;
 final class SlotHandlerRegistry
 {
     /**
+     * @worker-scoped Populated at boot by AttributeDiscovery, read-only during requests.
      * slot resource class => list of { handlerClass, priority }
      * @var array<string, list<array{handlerClass: string, priority: int}>>
      */

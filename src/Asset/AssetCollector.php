@@ -21,10 +21,13 @@ use Semitexa\Core\ModuleRegistry;
  */
 final class AssetCollector
 {
-    /** @var array<string, AssetEntry> Boot-time declarations keyed by canonical asset key */
+    /** @worker-scoped Boot-time declarations keyed by canonical asset key. Immutable after boot(). */
+    /** @var array<string, AssetEntry> */
     private static array $declarations = [];
 
+    /** @worker-scoped */
     private static bool $booted = false;
+    /** @worker-scoped */
     private static ?ModuleRegistry $moduleRegistry = null;
 
     public static function setModuleRegistry(ModuleRegistry $moduleRegistry): void
@@ -178,8 +181,8 @@ final class AssetCollector
         $modules = self::$moduleRegistry->getModules();
 
         foreach ($modules as $module) {
-            $moduleName = $module['name'] ?? '';
-            $modulePath = $module['path'] ?? '';
+            $moduleName = is_string($module['name'] ?? null) ? $module['name'] : '';
+            $modulePath = is_string($module['path'] ?? null) ? $module['path'] : '';
 
             if ($moduleName === '' || $modulePath === '') {
                 continue;

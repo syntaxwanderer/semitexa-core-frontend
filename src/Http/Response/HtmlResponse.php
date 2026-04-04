@@ -233,7 +233,7 @@ class HtmlResponse extends ResourceResponse
         }
 
         $cached = self::$attributeCache[$cacheKey];
-        if ($cached['handle'] !== null) {
+        if (is_string($cached['handle'] ?? null) && $cached['handle'] !== '') {
             $this->setRenderHandle($cached['handle']);
         }
         $this->declaredTemplate = $cached['template'];

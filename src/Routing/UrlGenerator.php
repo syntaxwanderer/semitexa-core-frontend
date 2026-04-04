@@ -80,6 +80,10 @@ final class UrlGenerator
 
     private static function findByPath(string $path): ?array
     {
+        if (self::$attributeDiscovery === null) {
+            return null;
+        }
+
         return self::$attributeDiscovery->findRoute($path, 'GET');
     }
 }
