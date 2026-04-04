@@ -29,10 +29,14 @@ final class DefaultErrorPageHandlerTest extends TestCase
         $this->injectRequest($handler, $this->makeRequest('/missing'));
 
         $resource = $handler->handle(new DefaultNotFoundPagePayload(), new DefaultErrorPageResource());
+        /** @var array<string, mixed> $context */
+        $context = $resource->getContext();
+        /** @var array<string, string> $requestDetails */
+        $requestDetails = $context['requestDetails'];
 
         self::assertSame(404, $resource->getStatusCode());
-        self::assertSame('The page you requested does not exist.', $resource->getContext()['headline']);
-        self::assertSame('/missing', $resource->getContext()['requestDetails']['Path']);
+        self::assertSame('The page you requested does not exist.', $context['headline']);
+        self::assertSame('/missing', $requestDetails['Path']);
     }
 
     #[Test]
@@ -56,11 +60,15 @@ final class DefaultErrorPageHandlerTest extends TestCase
         $this->injectRequest($handler, $this->makeRequest('/broken'));
 
         $resource = $handler->handle(new DefaultInternalErrorPagePayload(), new DefaultErrorPageResource());
+        /** @var array<string, mixed> $context */
+        $context = $resource->getContext();
+        /** @var array<string, string> $debugDetails */
+        $debugDetails = $context['debugDetails'];
 
         self::assertSame(500, $resource->getStatusCode());
-        self::assertSame('The request reached Semitexa, but rendering failed before a page could complete.', $resource->getContext()['headline']);
-        self::assertSame('Boom', $resource->getContext()['debugDetails']['Message']);
-        self::assertSame('demo.page', $resource->getContext()['debugDetails']['Origin route']);
+        self::assertSame('The request reached Semitexa, but rendering failed before a page could complete.', $context['headline']);
+        self::assertSame('Boom', $debugDetails['Message']);
+        self::assertSame('demo.page', $debugDetails['Origin route']);
     }
 
     private function injectRequest(object $handler, Request $request): void

@@ -11,7 +11,7 @@ use Semitexa\Ssr\Application\Resource\Response\DefaultErrorPageResource;
 #[PublicEndpoint]
 #[AsPayload(
     responseWith: DefaultErrorPageResource::class,
-    produces: ['application/json', 'text/html'],
+    produces: ['text/html'],
     path: '/__semitexa/error/404',
     methods: ['GET'],
     name: 'error.404',

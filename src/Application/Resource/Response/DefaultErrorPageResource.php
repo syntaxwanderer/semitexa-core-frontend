@@ -10,7 +10,7 @@ use Semitexa\Ssr\Http\Response\HtmlResponse;
 
 #[AsResource(
     handle: 'ssr_error_page',
-    template: '@project-layouts-semitexa-ssr/pages/error-page.html.twig',
+    template: '@core-frontend/pages/error-page.html.twig',
 )]
 final class DefaultErrorPageResource extends HtmlResponse implements ResourceInterface
 {
@@ -41,11 +41,17 @@ final class DefaultErrorPageResource extends HtmlResponse implements ResourceInt
         return $this->with('summary', $summary);
     }
 
+    /**
+     * @param array<string, string> $requestDetails
+     */
     public function withRequestDetails(array $requestDetails): self
     {
         return $this->with('requestDetails', $requestDetails);
     }
 
+    /**
+     * @param array<string, string>|null $debugDetails
+     */
     public function withDebugDetails(?array $debugDetails): self
     {
         return $this->with('debugDetails', $debugDetails);
