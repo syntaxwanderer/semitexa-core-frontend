@@ -6,6 +6,9 @@ namespace Semitexa\Ssr\Seo;
 
 use Semitexa\Core\Environment;
 use Semitexa\Core\Request;
+use Semitexa\Core\Tenant\Layer\OrganizationLayer;
+use Semitexa\Core\Tenant\TenantContextInterface;
+use Semitexa\Tenancy\Support\TenantUrlResolver;
 
 final class AiSitemapLocator
 {
@@ -16,23 +19,28 @@ final class AiSitemapLocator
         return self::PATH;
     }
 
-    public static function absoluteUrl(?Request $request = null): string
+    public static function absoluteUrl(?Request $request = null, ?TenantContextInterface $tenantContext = null): string
     {
         $override = trim((string) (Environment::getEnvValue('AI_SITEMAP_URL') ?? ''));
         if ($override !== '') {
             return $override;
         }
 
-        return rtrim(self::resolveOrigin($request), '/') . self::PATH;
+        return rtrim(self::resolveOrigin($request, $tenantContext), '/') . self::PATH;
     }
 
-    public static function originUrl(?Request $request = null): string
+    public static function originUrl(?Request $request = null, ?TenantContextInterface $tenantContext = null): string
     {
-        return rtrim(self::resolveOrigin($request), '/');
+        return rtrim(self::resolveOrigin($request, $tenantContext), '/');
     }
 
-    private static function resolveOrigin(?Request $request = null): string
+    private static function resolveOrigin(?Request $request = null, ?TenantContextInterface $tenantContext = null): string
     {
+        $tenantOrigin = self::resolveOriginFromTenantContext($tenantContext);
+        if ($tenantOrigin !== null) {
+            return $tenantOrigin;
+        }
+
         $requestOrigin = self::resolveOriginFromRequest($request);
         if ($requestOrigin !== null) {
             return $requestOrigin;
@@ -61,6 +69,21 @@ final class AiSitemapLocator
         }
 
         return sprintf('%s://%s:%d', $scheme, $host, $port);
+    }
+
+    private static function resolveOriginFromTenantContext(?TenantContextInterface $tenantContext): ?string
+    {
+        if (!$tenantContext instanceof TenantContextInterface) {
+            return null;
+        }
+
+        $organization = $tenantContext->getLayer(new OrganizationLayer());
+        $tenantId = trim($organization?->rawValue() ?? '');
+        if ($tenantId === '' || $tenantId === 'default') {
+            return null;
+        }
+
+        return TenantUrlResolver::resolveBaseUrl($tenantId, preferPublic: null);
     }
 
     private static function resolveOriginFromRequest(?Request $request): ?string

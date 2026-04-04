@@ -9,6 +9,7 @@ use Semitexa\Core\Attributes\InjectAsReadonly;
 use Semitexa\Core\Contract\TypedHandlerInterface;
 use Semitexa\Core\Http\Response\GenericResponse;
 use Semitexa\Core\Request;
+use Semitexa\Core\Tenant\TenantContextInterface;
 use Semitexa\Core\Util\ProjectRoot;
 use Semitexa\Ssr\Application\Payload\Request\LlmsTxtPayload;
 use Semitexa\Ssr\Seo\LlmsTxtRenderer;
@@ -18,6 +19,9 @@ final class LlmsTxtHandler implements TypedHandlerInterface
 {
     #[InjectAsReadonly]
     protected Request $request;
+
+    #[InjectAsReadonly]
+    protected TenantContextInterface $tenantContext;
 
     public function handle(LlmsTxtPayload $payload, GenericResponse $resource): GenericResponse
     {
@@ -41,6 +45,6 @@ final class LlmsTxtHandler implements TypedHandlerInterface
             }
         }
 
-        return LlmsTxtRenderer::render($this->request);
+        return LlmsTxtRenderer::render($this->request, $this->tenantContext);
     }
 }

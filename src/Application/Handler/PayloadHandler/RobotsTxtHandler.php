@@ -9,6 +9,7 @@ use Semitexa\Core\Attributes\InjectAsReadonly;
 use Semitexa\Core\Contract\TypedHandlerInterface;
 use Semitexa\Core\Http\Response\GenericResponse;
 use Semitexa\Core\Request;
+use Semitexa\Core\Tenant\TenantContextInterface;
 use Semitexa\Core\Util\ProjectRoot;
 use Semitexa\Ssr\Application\Payload\Request\RobotsTxtPayload;
 use Semitexa\Ssr\Seo\RobotsTxtRenderer;
@@ -18,6 +19,9 @@ final class RobotsTxtHandler implements TypedHandlerInterface
 {
     #[InjectAsReadonly]
     protected Request $request;
+
+    #[InjectAsReadonly]
+    protected TenantContextInterface $tenantContext;
 
     public function handle(RobotsTxtPayload $payload, GenericResponse $resource): GenericResponse
     {
@@ -41,6 +45,6 @@ final class RobotsTxtHandler implements TypedHandlerInterface
             }
         }
 
-        return RobotsTxtRenderer::render($this->request);
+        return RobotsTxtRenderer::render($this->request, $this->tenantContext);
     }
 }
