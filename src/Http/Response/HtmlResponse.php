@@ -73,7 +73,7 @@ class HtmlResponse extends ResourceResponse
                 $value = trim($keyword);
             } elseif (is_array($keyword)) {
                 foreach (['term', 'title', 'label', 'name'] as $key) {
-                    if (isset($keyword[$key]) && is_string($keyword[$key])) {
+                    if (isset($keyword[$key])) {
                         $value = trim($keyword[$key]);
                         break;
                     }
@@ -140,6 +140,8 @@ class HtmlResponse extends ResourceResponse
 
         $context['response'] ??= $this;
 
+        /** @var array<string, mixed> $context */
+        $context = $context;
         $context = $this->applyIsomorphicContext($context);
         self::applySeoDefaults($context);
         PageRenderContextStore::set($context);
@@ -154,10 +156,15 @@ class HtmlResponse extends ResourceResponse
         return $this;
     }
 
+    /**
+     * @param array<string, mixed> $context
+     */
     public function renderString(string $templateSource, array $context = []): static
     {
         $this->beginTopLevelRender();
 
+        /** @var array<string, mixed> $context */
+        $context = $context;
         $context = $this->applyIsomorphicContext($context);
         self::applySeoDefaults($context);
 
@@ -290,6 +297,10 @@ class HtmlResponse extends ResourceResponse
         $this->declaredTemplate = $cached['template'];
     }
 
+    /**
+     * @param array<string, mixed> $context
+     * @return array<string, mixed>
+     */
     private function applyIsomorphicContext(array $context): array
     {
         $handle = $context['page_handle'] ?? $context['layout_handle'] ?? null;
@@ -355,6 +366,8 @@ class HtmlResponse extends ResourceResponse
      *
      * This keeps page metadata valid even for older pages or future pages that only provide
      * a title/summary/feature context instead of calling seo helpers directly.
+     *
+     * @param array<string, mixed> $context
      */
     private static function applySeoDefaults(array $context): void
     {

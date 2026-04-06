@@ -29,7 +29,9 @@ readonly class StaticAssetHandler
 
     public function handle(SwooleRequest $request, SwooleResponse $response): bool
     {
-        $uri = $request->server['request_uri'] ?? '';
+        $uri = isset($request->server['request_uri']) && is_string($request->server['request_uri'])
+            ? $request->server['request_uri']
+            : '';
         if ($uri !== '' && str_contains($uri, '?')) {
             $uri = explode('?', $uri, 2)[0];
         }
@@ -52,7 +54,7 @@ readonly class StaticAssetHandler
         $module = substr($rest, 0, $slashPos);
         $path = substr($rest, $slashPos + 1);
 
-        if ($path === '' || $path === false) {
+        if ($path === '') {
             $response->status(404);
             $response->end('Not Found');
             return true;
