@@ -9,6 +9,9 @@ use Attribute;
 #[Attribute(Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE)]
 class AsLayoutSlot
 {
+    /**
+     * @param array<string, mixed> $context
+     */
     public function __construct(
         public string $handle,
         public string $slot,
@@ -23,4 +26,3 @@ class AsLayoutSlot
         public int $refreshInterval = 0,
     ) {}
 }
-

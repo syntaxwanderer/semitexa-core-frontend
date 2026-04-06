@@ -9,6 +9,10 @@ use Attribute;
 #[Attribute(Attribute::TARGET_CLASS | Attribute::IS_REPEATABLE)]
 final class AsSlotResource
 {
+    /**
+     * @param list<string> $clientModules
+     * @param array<string, mixed> $context
+     */
     public function __construct(
         public string $handle,
         public string $slot,
