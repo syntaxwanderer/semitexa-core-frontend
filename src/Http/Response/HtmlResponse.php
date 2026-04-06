@@ -219,6 +219,8 @@ class HtmlResponse extends ResourceResponse
         if (class_exists(\Semitexa\Ssr\Asset\AssetCollectorStore::class)) {
             \Semitexa\Ssr\Asset\AssetCollectorStore::reset();
         }
+
+        \Semitexa\Ssr\Asset\AssetManager::reset();
     }
 
     /**

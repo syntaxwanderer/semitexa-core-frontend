@@ -12,6 +12,9 @@ final class AssetManager
     private static ?array $manifest = null;
     private static string $publicPath = '/assets';
     private static array $moduleVersions = [];
+    /**
+     * @var array<string, array{mtime:int,size:int,fingerprint:string}>
+     */
     private static array $fingerprintCache = [];
 
     public static function getUrl(string $path, ?string $module = null): string
@@ -117,7 +120,7 @@ final class AssetManager
         $lockPath = ProjectRoot::get() . '/composer.lock';
         if (is_file($lockPath)) {
             $hash = hash_file('sha256', $lockPath);
-            if (is_string($hash) && $hash !== '') {
+            if ($hash !== false) {
                 return substr($hash, 0, 12);
             }
         }
@@ -127,7 +130,12 @@ final class AssetManager
 
     private static function getAssetFingerprint(string $module, string $path): string
     {
-        $resolved = ModuleAssetRegistry::resolve($module, $path);
+        try {
+            $resolved = ModuleAssetRegistry::resolve($module, $path);
+        } catch (\LogicException) {
+            return self::getVersion($module);
+        }
+
         if ($resolved === null) {
             return self::getVersion($module);
         }
@@ -135,19 +143,26 @@ final class AssetManager
         clearstatcache(true, $resolved);
         $mtime = @filemtime($resolved) ?: 0;
         $size = @filesize($resolved) ?: 0;
-        $cacheKey = $resolved . '|' . $mtime . '|' . $size;
-
-        if (isset(self::$fingerprintCache[$cacheKey])) {
-            return self::$fingerprintCache[$cacheKey];
+        $cached = self::$fingerprintCache[$resolved] ?? null;
+        if ($cached !== null && $cached['mtime'] === $mtime && $cached['size'] === $size) {
+            return $cached['fingerprint'];
         }
 
-        $hash = hash_file('sha256', $resolved);
-        if (!is_string($hash) || $hash === '') {
+        if (!is_readable($resolved)) {
+            return self::getVersion($module);
+        }
+
+        $hash = @hash_file('sha256', $resolved);
+        if ($hash === false) {
             return self::getVersion($module);
         }
 
         $fingerprint = substr($hash, 0, 12);
-        self::$fingerprintCache[$cacheKey] = $fingerprint;
+        self::$fingerprintCache[$resolved] = [
+            'mtime' => $mtime,
+            'size' => $size,
+            'fingerprint' => $fingerprint,
+        ];
 
         return $fingerprint;
     }
