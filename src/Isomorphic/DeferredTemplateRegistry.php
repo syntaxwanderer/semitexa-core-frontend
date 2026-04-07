@@ -42,6 +42,10 @@ final class DeferredTemplateRegistry
         }
 
         if (!is_dir($outputDir) && !@mkdir($outputDir, 0755, true) && !is_dir($outputDir)) {
+            error_log(sprintf(
+                'Deferred template publishing skipped: unable to create output directory "%s".',
+                $outputDir,
+            ));
             return;
         }
 
