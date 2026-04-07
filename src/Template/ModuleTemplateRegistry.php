@@ -179,8 +179,11 @@ final class ModuleTemplateRegistry
         self::$loader = $loader;
 
         $cacheDir = self::getWritableCacheDir();
-        if (!is_dir($cacheDir)) {
-            @mkdir($cacheDir, 0755, true);
+        if (!is_dir($cacheDir) && !@mkdir($cacheDir, 0755, true) && !is_dir($cacheDir)) {
+            $cacheDir = sys_get_temp_dir() . '/semitexa-twig-cache';
+            if (!is_dir($cacheDir)) {
+                @mkdir($cacheDir, 0755, true);
+            }
         }
 
         self::$twig = new TwigEnvironment($loader, [
@@ -251,8 +254,8 @@ final class ModuleTemplateRegistry
     {
         $cacheDir = ProjectRoot::get() . '/var/cache/twig';
 
-        if (!is_dir($cacheDir)) {
-            @mkdir($cacheDir, 0755, true);
+        if (!is_dir($cacheDir) && !@mkdir($cacheDir, 0755, true) && !is_dir($cacheDir)) {
+            $cacheDir = sys_get_temp_dir() . '/semitexa-twig-cache';
         }
 
         if (is_dir($cacheDir) && is_writable($cacheDir)) {
@@ -260,8 +263,8 @@ final class ModuleTemplateRegistry
         }
 
         $fallback = sys_get_temp_dir() . '/semitexa-twig-cache';
-        if (!is_dir($fallback)) {
-            @mkdir($fallback, 0755, true);
+        if (!is_dir($fallback) && !@mkdir($fallback, 0755, true) && !is_dir($fallback)) {
+            return $fallback;
         }
 
         return $fallback;

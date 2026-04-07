@@ -41,7 +41,7 @@ final class DeferredTemplateRegistry
             $outputDir .= '/' . $tenantId;
         }
 
-        if (!is_dir($outputDir) && !mkdir($outputDir, 0755, true) && !is_dir($outputDir)) {
+        if (!is_dir($outputDir) && !@mkdir($outputDir, 0755, true) && !is_dir($outputDir)) {
             return;
         }
 
