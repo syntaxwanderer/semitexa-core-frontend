@@ -106,10 +106,11 @@ final class AsyncResourceSseServer
             return;
         }
 
-        $sessionId = trim((string) (($request->get['session_id'] ?? null) ?: uniqid('sse_', true)));
+        $get = is_array($request->get) ? $request->get : [];
+        $sessionId = trim((string) (($get['session_id'] ?? null) ?: uniqid('sse_', true)));
         $demoStream = '';
-        if (is_array($request->get) && isset($request->get['demo_stream'])) {
-            $demoStream = trim((string) $request->get['demo_stream']);
+        if (isset($get['demo_stream'])) {
+            $demoStream = trim((string) $get['demo_stream']);
         }
 
         if ($demoStream !== '') {
