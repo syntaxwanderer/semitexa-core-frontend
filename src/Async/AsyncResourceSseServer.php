@@ -106,13 +106,30 @@ final class AsyncResourceSseServer
             return;
         }
 
+        $get = is_array($request->get) ? $request->get : [];
+        $sessionId = trim((string) (($get['session_id'] ?? null) ?: uniqid('sse_', true)));
+        $demoStream = '';
+        if (isset($get['demo_stream'])) {
+            $demoStream = trim((string) $get['demo_stream']);
+        }
+
+        if ($demoStream !== '') {
+            if (!self::hasAuthenticatedSession($request)) {
+                $response->status(401);
+                $response->header('Content-Type', 'application/json');
+                $response->end(json_encode([
+                    'error' => 'Unauthorized',
+                    'message' => 'Authorization is required for this SSE demo stream.',
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+                return;
+            }
+        }
+
         $response->status(200);
         $response->header('Content-Type', 'text/event-stream');
         $response->header('Cache-Control', 'no-cache');
         $response->header('Connection', 'keep-alive');
         $response->header('X-Accel-Buffering', 'no');
-
-        $sessionId = trim((string) (($request->get['session_id'] ?? null) ?: uniqid('sse_', true)));
 
         self::$sessions[$sessionId] = [
             'response' => $response,
@@ -188,10 +205,6 @@ final class AsyncResourceSseServer
         // and ensures response is flushed; some proxies don't send headers until first byte).
         self::writeSse($response, ['event' => 'connected', 'connected' => true]);
 
-        $demoStream = '';
-        if (is_array($request->get) && isset($request->get['demo_stream'])) {
-            $demoStream = trim((string) $request->get['demo_stream']);
-        }
         $enableDemoStream = filter_var((string) (\getenv('APP_DEBUG') ?: ''), FILTER_VALIDATE_BOOLEAN);
         if ($demoStream !== '' && $enableDemoStream) {
             self::startDemoStreamProducer($sessionId, $demoStream);
