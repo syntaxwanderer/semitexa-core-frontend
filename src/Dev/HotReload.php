@@ -6,6 +6,7 @@ namespace Semitexa\Ssr\Dev;
 
 use Semitexa\Core\Environment;
 use Semitexa\Core\Support\ProjectRoot;
+use Semitexa\Ssr\Template\ModuleTemplateRegistry;
 use Swoole\Http\Request;
 use Swoole\Http\Response;
 
@@ -24,13 +25,16 @@ final class HotReload
         }
 
         self::$enabled = $env->get('HOT_RELOAD', 'true') === 'true';
-        
+
         if (self::$enabled) {
+            $twigCacheDir = ModuleTemplateRegistry::getCacheDir();
             self::$watchPaths = [
                 ProjectRoot::get() . '/src/modules',
                 ProjectRoot::get() . '/src/theme',
-                ProjectRoot::get() . '/var/cache/twig',
             ];
+            if (is_string($twigCacheDir) && $twigCacheDir !== '') {
+                self::$watchPaths[] = $twigCacheDir;
+            }
         }
     }
 
@@ -64,7 +68,7 @@ final class HotReload
     {
         $response->header('Content-Type', 'application/json');
         $response->header('Cache-Control', 'no-cache');
-        
+
         $response->end(json_encode([
             'timestamp' => time(),
             'files' => self::getChangedFiles(),
@@ -74,16 +78,16 @@ final class HotReload
     private static function serveLivereloadScript(Response $response): void
     {
         $response->header('Content-Type', 'application/javascript');
-        
+
         $script = <<<'JS'
         (function() {
             let lastTimestamp = Date.now();
-            
+
             async function check() {
                 try {
                     const res = await fetch('/__semitexa_hotreload');
                     const data = await res.json();
-                    
+
                     if (data.timestamp > lastTimestamp) {
                         lastTimestamp = data.timestamp;
                         if (data.files && data.files.length > 0) {
@@ -97,19 +101,19 @@ final class HotReload
             setInterval(check, 1000);
         })();
         JS;
-        
+
         $response->end($script);
     }
 
     private static function getChangedFiles(): array
     {
         $files = [];
-        
+
         foreach (self::$watchPaths as $path) {
             if (!is_dir($path)) {
                 continue;
             }
-            
+
             $iterator = new \RecursiveIteratorIterator(
                 new \RecursiveDirectoryIterator($path, \RecursiveDirectoryIterator::SKIP_DOTS)
             );

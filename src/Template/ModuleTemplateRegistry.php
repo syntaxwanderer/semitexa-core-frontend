@@ -51,6 +51,11 @@ final class ModuleTemplateRegistry
         return self::$loader;
     }
 
+    public static function getCacheDir(): ?string
+    {
+        return self::getWritableCacheDir();
+    }
+
     private static function discoverModulePaths(): void
     {
         $modulesRoot = ProjectRoot::get() . '/src/modules';

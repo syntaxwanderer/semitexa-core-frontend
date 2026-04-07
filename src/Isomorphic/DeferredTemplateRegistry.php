@@ -41,12 +41,15 @@ final class DeferredTemplateRegistry
             $outputDir .= '/' . $tenantId;
         }
 
-        if (!is_dir($outputDir) && !@mkdir($outputDir, 0755, true) && !is_dir($outputDir)) {
-            error_log(sprintf(
-                'Deferred template publishing skipped: unable to create output directory "%s".',
-                $outputDir,
-            ));
-            return;
+        if (!is_dir($outputDir)) {
+            $created = mkdir($outputDir, 0755, true);
+            if (!$created && !is_dir($outputDir)) {
+                error_log(sprintf(
+                    'Deferred template publishing skipped: unable to create output directory "%s".',
+                    $outputDir,
+                ));
+                return;
+            }
         }
 
         if ($assetBasePath !== '' && $assetBasePath !== '.' && $assetBasePath !== $basePath) {
