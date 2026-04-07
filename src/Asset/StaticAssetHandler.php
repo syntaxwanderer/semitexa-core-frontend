@@ -4,11 +4,17 @@ declare(strict_types=1);
 
 namespace Semitexa\Ssr\Asset;
 
+use Semitexa\Core\ModuleRegistry;
 use Swoole\Http\Request as SwooleRequest;
 use Swoole\Http\Response as SwooleResponse;
 
 readonly class StaticAssetHandler
 {
+    public function __construct(
+        private ModuleRegistry $moduleRegistry,
+    ) {
+    }
+
     private const PREFIXES = ['/assets/', '/static/'];
 
     private const CONTENT_TYPES = [
@@ -29,6 +35,8 @@ readonly class StaticAssetHandler
 
     public function handle(SwooleRequest $request, SwooleResponse $response): bool
     {
+        ModuleAssetRegistry::setModuleRegistry($this->moduleRegistry);
+
         $uri = isset($request->server['request_uri']) && is_string($request->server['request_uri'])
             ? $request->server['request_uri']
             : '';
