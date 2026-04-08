@@ -64,7 +64,8 @@ class LayoutRenderer
                         IsomorphicContextStore::setSessionId($sessionId);
                     }
 
-                    // Store deferred request context in Swoole Table
+                    // Store deferred request context in Swoole Table. The slot list is narrowed
+                    // to actually rendered placeholders after Twig finishes rendering.
                     $slotIds = array_map(static fn ($s) => $s->slotId, $deferredSlots);
                     $bindToken = bin2hex(random_bytes(16));
                     $locale = '';
@@ -97,10 +98,33 @@ class LayoutRenderer
             $mergedContext = array_merge($baseContext, $context);
             PageRenderContextStore::set($mergedContext);
 
-            return ModuleTemplateRegistry::getTwig()->render(
+            $html = ModuleTemplateRegistry::getTwig()->render(
                 $layout['template'],
                 $mergedContext
             );
+
+            $requestId = $baseContext['__ssr_deferred_request_id'] ?? null;
+            if (is_string($requestId) && $requestId !== '') {
+                $renderedSlots = PlaceholderRenderer::filterRenderedSlotsFromHtml(
+                    $html,
+                    $baseContext['__ssr_deferred_slots'] ?? []
+                );
+                $renderedSlotIds = array_map(static fn ($slot) => $slot->slotId, $renderedSlots);
+                DeferredRequestRegistry::updateSlots($requestId, $renderedSlotIds);
+
+                $updatedPreloadHints = PlaceholderRenderer::renderPreloadHints($renderedSlots);
+                $updatedManifest = PlaceholderRenderer::renderManifest(
+                    $requestId,
+                    (string) ($baseContext['__ssr_deferred_session_id'] ?? ''),
+                    $renderedSlots,
+                    (string) $bindToken,
+                );
+
+                $html = str_replace((string) ($baseContext['__ssr_preload_hints'] ?? ''), $updatedPreloadHints, $html);
+                $html = str_replace((string) ($baseContext['__ssr_deferred_manifest'] ?? ''), $updatedManifest, $html);
+            }
+
+            return $html;
         } catch (\Throwable $e) {
             error_log("Error rendering layout '{$handle}': " . $e->getMessage());
             return '<!doctype html><html><head><meta charset="utf-8"><title>'

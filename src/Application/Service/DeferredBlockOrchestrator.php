@@ -73,7 +73,7 @@ final class DeferredBlockOrchestrator
         }
 
         if ($slots === []) {
-            $liveEnabled = $startLiveLoop && $persistentDeferredSse && $liveSlots !== [];
+            $liveEnabled = $startLiveLoop && $persistentDeferredSse;
             SseAsyncResultDelivery::deliverRaw($sessionId, [
                 'type' => 'done',
                 'live' => $liveEnabled,
@@ -116,7 +116,7 @@ final class DeferredBlockOrchestrator
                 }
             }
 
-            $liveEnabled = $startLiveLoop && $persistentDeferredSse && $liveSlots !== [];
+            $liveEnabled = $startLiveLoop && $persistentDeferredSse;
             SseAsyncResultDelivery::deliverRaw($sessionId, [
                 'type' => 'done',
                 'live' => $liveEnabled,
@@ -195,7 +195,7 @@ final class DeferredBlockOrchestrator
             }
         }
 
-        $liveEnabled = $startLiveLoop && $persistentDeferredSse && $liveSlots !== [];
+        $liveEnabled = $startLiveLoop && $persistentDeferredSse;
         SseAsyncResultDelivery::deliverRaw($sessionId, [
             'type' => 'done',
             'live' => $liveEnabled,
@@ -330,6 +330,10 @@ final class DeferredBlockOrchestrator
 
         if ($slot->mode === 'template') {
             $templatePath = DeferredTemplateRegistry::getPublishedPath($slot->slotId, $slot->pageHandle);
+            if ($templatePath === null || $templatePath === '') {
+                DeferredTemplateRegistry::initialize(IsomorphicConfig::fromEnvironment());
+                $templatePath = DeferredTemplateRegistry::getPublishedPath($slot->slotId, $slot->pageHandle);
+            }
             if ($templatePath !== null && $templatePath !== '') {
                 return new DeferredBlockPayload(
                     slotId: $slot->slotId,

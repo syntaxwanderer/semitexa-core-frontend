@@ -220,6 +220,48 @@ final class DeferredRequestRegistry
         }
     }
 
+    /**
+     * @param string[] $slotIds
+     */
+    public static function updateSlots(string $requestId, array $slotIds): void
+    {
+        if (self::$table === null) {
+            return;
+        }
+
+        $key = self::tableKey($requestId);
+        $row = self::$table->get($key);
+        if ($row === false) {
+            return;
+        }
+
+        $slotIds = array_values(array_unique(array_filter(
+            array_map(static fn (mixed $slotId): string => trim((string) $slotId), $slotIds),
+            static fn (string $slotId): bool => $slotId !== ''
+        )));
+
+        try {
+            $slotsJson = json_encode($slotIds, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            throw new DeferredRenderingException(
+                'Failed to serialize deferred request slots: ' . $e->getMessage()
+            );
+        }
+
+        $ok = self::$table->set($key, [
+            'page_handle' => $row['page_handle'],
+            'page_context' => $row['page_context'],
+            'bind_token' => $row['bind_token'] ?? '',
+            'locale' => $row['locale'] ?? '',
+            'slots' => $slotsJson,
+            'delivered' => $row['delivered'],
+            'created_at' => $row['created_at'],
+        ]);
+        if ($ok === false) {
+            throw new DeferredRenderingException('Failed to update deferred request slots.');
+        }
+    }
+
     public static function matchesBindToken(string $requestId, string $bindToken): bool
     {
         if ($bindToken === '') {

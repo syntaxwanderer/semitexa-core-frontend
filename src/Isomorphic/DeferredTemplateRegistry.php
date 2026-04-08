@@ -77,7 +77,16 @@ final class DeferredTemplateRegistry
             $filename = "{$safeName}.{$hash}.twig";
 
             $outputFile = $outputDir . '/' . $filename;
-            if (file_put_contents($outputFile, $content) === false) {
+            if (is_file($outputFile)) {
+                $existing = file_get_contents($outputFile);
+                if ($existing === false) {
+                    continue;
+                }
+
+                if ($existing !== $content && file_put_contents($outputFile, $content) === false) {
+                    continue;
+                }
+            } elseif (file_put_contents($outputFile, $content) === false) {
                 continue;
             }
 

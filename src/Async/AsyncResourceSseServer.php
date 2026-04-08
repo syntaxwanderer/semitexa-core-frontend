@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Semitexa\Ssr\Async;
 
 use Semitexa\Core\Environment;
+use Semitexa\Core\Redis\RedisConnectionPool;
 use Semitexa\Core\Session\RedisSessionHandler;
 use Semitexa\Core\Session\SessionHandlerInterface;
 use Semitexa\Core\Session\SwooleTableSessionHandler;
@@ -16,6 +17,15 @@ use Swoole\Http\Response;
 final class AsyncResourceSseServer
 {
     private const AUTH_SESSION_USER_KEY = '_auth_user_id';
+    private const AUTH_SESSION_TTL_SECONDS = 7200;
+    private const AUTH_SESSION_TOUCH_INTERVAL_SECONDS = 30;
+    private const ACTIVE_SESSION_TTL_SECONDS = 45;
+    private const REDIS_AUTH_USER_SESSIONS_PREFIX = 'semitexa_sse_auth_user:';
+    private const REDIS_AUTH_SESSION_USER_PREFIX = 'semitexa_sse_auth_session:';
+    private const REDIS_AUTH_ALL_SESSIONS_KEY = 'semitexa_sse_auth_sessions';
+    private const REDIS_ACTIVE_SESSION_PREFIX = 'semitexa_sse_active_session:';
+    private const REDIS_SESSION_QUEUE_PREFIX = 'semitexa_sse_queue:';
+    private const REDIS_SESSION_QUEUE_TTL_SECONDS = 7200;
 
     private static array $sessions = [];
 
@@ -38,44 +48,6 @@ final class AsyncResourceSseServer
 
     /** @var \Swoole\Table|null pending messages when client not connected yet: key -> session_id, payload */
     private static ?\Swoole\Table $pendingDeliverTable = null;
-
-    private const RABBITMQ_QUEUE_PREFIX = 'sse.deliver.';
-
-    private static function rabbitQueueName(string $sessionId): string
-    {
-        return self::RABBITMQ_QUEUE_PREFIX . md5(trim($sessionId));
-    }
-
-    /** @var \AMQPChannel|null Lazy-created per worker when RabbitMQ env is set */
-    private static ?\AMQPChannel $amqpChannel = null;
-
-    private static function getRabbitMqChannel(): ?\AMQPChannel
-    {
-        if (self::$amqpChannel !== null) {
-            return self::$amqpChannel;
-        }
-        if (!class_exists(\AMQPConnection::class)) {
-            return null;
-        }
-        $host = Environment::getEnvValue('RABBITMQ_HOST', '');
-        if ($host === '') {
-            return null;
-        }
-        try {
-            $conn = new \AMQPConnection([
-                'host' => $host,
-                'port' => (int) Environment::getEnvValue('RABBITMQ_PORT', '5672'),
-                'login' => Environment::getEnvValue('RABBITMQ_USER', 'guest'),
-                'password' => Environment::getEnvValue('RABBITMQ_PASSWORD', 'guest'),
-                'vhost' => Environment::getEnvValue('RABBITMQ_VHOST', '/'),
-            ]);
-            $conn->connect();
-            self::$amqpChannel = new \AMQPChannel($conn);
-            return self::$amqpChannel;
-        } catch (\Throwable $e) {
-            return null;
-        }
-    }
 
     public static function handle(Request $request, Response $response): bool
     {
@@ -138,25 +110,16 @@ final class AsyncResourceSseServer
             'connected_at' => time(),
         ];
 
+        $authenticatedUserId = self::resolveAuthenticatedUserId($request);
+        if ($authenticatedUserId !== '') {
+            self::registerAuthenticatedSession($sessionId, $authenticatedUserId);
+        }
+        self::touchActiveSession($sessionId);
+
         if (self::$sessionWorkerTable !== null && self::$httpServer !== null) {
             $workerId = self::getCurrentWorkerId();
             $key = self::sessionTableKey($sessionId);
             self::$sessionWorkerTable->set($key, ['worker_id' => $workerId]);
-        }
-
-        // Declare RabbitMQ queue for this session so deliver() from any worker/server can publish
-        $rabbitQueueName = null;
-        $channel = self::getRabbitMqChannel();
-        if ($channel !== null) {
-            try {
-                $rabbitQueueName = self::rabbitQueueName($sessionId);
-                $queue = new \AMQPQueue($channel);
-                $queue->setName($rabbitQueueName);
-                $queue->setFlags(\defined('AMQP_DURABLE') ? AMQP_DURABLE : 2);
-                $queue->declareQueue();
-            } catch (\Throwable $e) {
-                $rabbitQueueName = null;
-            }
         }
 
         if (!isset(self::$queues[$sessionId])) {
@@ -192,12 +155,11 @@ final class AsyncResourceSseServer
             }
         }
 
-        // Flush RabbitMQ queue for this session (messages from any worker/server)
-        if (self::drainRabbitMqQueueForSession($sessionId, $response)) {
+        if (self::drainRedisQueueForSession($sessionId, $response)) {
             if (self::$sessionWorkerTable !== null) {
                 self::$sessionWorkerTable->del(self::sessionTableKey($sessionId));
             }
-            self::deleteRabbitMqQueueForSession($sessionId);
+            self::unregisterAuthenticatedSession($sessionId);
             unset(self::$sessions[$sessionId], self::$queues[$sessionId]);
             $response->end();
             return;
@@ -225,6 +187,7 @@ final class AsyncResourceSseServer
                     'reconnect' => false,
                 ]);
                 $response->end();
+                self::unregisterAuthenticatedSession($sessionId);
                 unset(self::$sessions[$sessionId], self::$queues[$sessionId]);
                 return;
             }
@@ -237,7 +200,16 @@ final class AsyncResourceSseServer
         }
 
         $closed = false;
+        $lastAuthTouchAt = time();
         while (!$closed && isset(self::$sessions[$sessionId])) {
+            if ((time() - $lastAuthTouchAt) >= self::AUTH_SESSION_TOUCH_INTERVAL_SECONDS) {
+                self::touchActiveSession($sessionId);
+                if ($authenticatedUserId !== '') {
+                    self::registerAuthenticatedSession($sessionId, $authenticatedUserId);
+                }
+                $lastAuthTouchAt = time();
+            }
+
             while (isset(self::$queues[$sessionId]) && self::$queues[$sessionId] !== []) {
                 $data = array_shift(self::$queues[$sessionId]);
                 if (!self::writeSse($response, $data)) {
@@ -272,10 +244,8 @@ final class AsyncResourceSseServer
                 }
             }
 
-            if (!$closed) {
-                if (self::drainRabbitMqQueueForSession($sessionId, $response)) {
-                    $closed = true;
-                }
+            if (!$closed && self::drainRedisQueueForSession($sessionId, $response)) {
+                $closed = true;
             }
 
             if ($closed) {
@@ -292,7 +262,7 @@ final class AsyncResourceSseServer
         if (self::$sessionWorkerTable !== null) {
             self::$sessionWorkerTable->del(self::sessionTableKey($sessionId));
         }
-        self::deleteRabbitMqQueueForSession($sessionId);
+        self::unregisterAuthenticatedSession($sessionId);
         unset(self::$sessions[$sessionId]);
         unset(self::$queues[$sessionId]);
         unset(self::$demoProducers[$sessionId]);
@@ -394,53 +364,41 @@ final class AsyncResourceSseServer
         }
     }
 
-    private static function drainRabbitMqQueueForSession(string $sessionId, Response $response): bool
+    private static function drainRedisQueueForSession(string $sessionId, Response $response): bool
     {
-        $channel = self::getRabbitMqChannel();
-        if ($channel === null) {
+        $pool = self::getRedisPool();
+        if ($pool === null) {
             return false;
         }
-        try {
-            $queue = new \AMQPQueue($channel);
-            $queue->setName(self::rabbitQueueName($sessionId));
-            $queue->setFlags(\defined('AMQP_DURABLE') ? AMQP_DURABLE : 2);
-            $queue->declareQueue();
-            $count = 0;
+
+        $payloads = $pool->withConnection(static function ($redis) use ($sessionId): array {
+            $queueKey = self::redisSessionQueueKey($sessionId);
+            $messages = [];
+
             while (true) {
-                $envelope = $queue->get(\defined('AMQP_NOPARAM') ? AMQP_NOPARAM : 0);
-                if ($envelope === false) {
+                $raw = $redis->lpop($queueKey);
+                if (!is_string($raw) || $raw === '') {
                     break;
                 }
-                $data = json_decode($envelope->getBody(), true);
-                if (is_array($data) && self::writeSse($response, $data)) {
-                    $count++;
-                    if (self::shouldCloseAfterPayload($data)) {
-                        $queue->ack($envelope->getDeliveryTag());
-                        return true;
-                    }
-                }
-                $queue->ack($envelope->getDeliveryTag());
+
+                $messages[] = $raw;
             }
-        } catch (\Throwable $e) {
-            self::$amqpChannel = null;
+
+            return $messages;
+        });
+
+        foreach ($payloads as $raw) {
+            $data = json_decode((string) $raw, true);
+            if (!is_array($data) || !self::writeSse($response, $data)) {
+                continue;
+            }
+
+            if (self::shouldCloseAfterPayload($data)) {
+                return true;
+            }
         }
+
         return false;
-    }
-
-    private static function deleteRabbitMqQueueForSession(string $sessionId): void
-    {
-        $channel = self::getRabbitMqChannel();
-        if ($channel === null) {
-            return;
-        }
-
-        try {
-            $queue = new \AMQPQueue($channel);
-            $queue->setName(self::rabbitQueueName($sessionId));
-            $queue->delete();
-        } catch (\Throwable $e) {
-            // ignore
-        }
     }
 
     private static function writeSse(Response $response, array $data): bool
@@ -551,7 +509,7 @@ final class AsyncResourceSseServer
 
     /**
      * Deliver payload to session.
-     * Paths: same-worker queue -> RabbitMQ (cross-worker/server) -> Swoole Tables fallback -> pendingTable -> buffer.
+     * Paths: same-worker queue -> Redis queue (cross-worker/server) -> Swoole Tables fallback -> pendingTable -> buffer.
      */
     public static function deliver(string $sessionId, array $data): void
     {
@@ -571,22 +529,17 @@ final class AsyncResourceSseServer
             return;
         }
 
-        // Cross-worker / cross-server: use RabbitMQ when available (scales across machines and offices)
-        $channel = self::getRabbitMqChannel();
-        if ($channel !== null) {
-            try {
-                $queueName = self::rabbitQueueName($sessionId);
-                $payload = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-                $queue = new \AMQPQueue($channel);
-                $queue->setName($queueName);
-                $queue->setFlags(\defined('AMQP_DURABLE') ? AMQP_DURABLE : 2);
-                $queue->declareQueue();
-                $exchange = new \AMQPExchange($channel);
-                $exchange->setName('');
-                $exchange->publish($payload, $queueName, \defined('AMQP_NOPARAM') ? AMQP_NOPARAM : 0, ['delivery_mode' => 2]);
+        // Cross-worker / cross-server: use Redis queue when available.
+        $pool = self::getRedisPool();
+        if ($pool !== null) {
+            $payload = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            if (is_string($payload) && $payload !== '') {
+                $pool->withConnection(static function ($redis) use ($sessionId, $payload): void {
+                    $queueKey = self::redisSessionQueueKey($sessionId);
+                    $redis->rpush($queueKey, [$payload]);
+                    $redis->expire($queueKey, self::REDIS_SESSION_QUEUE_TTL_SECONDS);
+                });
                 return;
-            } catch (\Throwable $e) {
-                self::$amqpChannel = null;
             }
         }
 
@@ -678,11 +631,44 @@ final class AsyncResourceSseServer
         self::$httpServer = $server;
     }
 
-    public static function setTables(\Swoole\Table $sessionWorkerTable, \Swoole\Table $deliverTable, ?\Swoole\Table $pendingDeliverTable = null): void
+    public static function setTables(
+        \Swoole\Table $sessionWorkerTable,
+        \Swoole\Table $deliverTable,
+        ?\Swoole\Table $pendingDeliverTable = null,
+    ): void
     {
         self::$sessionWorkerTable = $sessionWorkerTable;
         self::$deliverTable = $deliverTable;
         self::$pendingDeliverTable = $pendingDeliverTable;
+    }
+
+    public static function deliverToUser(string $userId, array $data): int
+    {
+        $userId = trim($userId);
+        if ($userId === '') {
+            return 0;
+        }
+
+        $sessionIds = self::getAuthenticatedUserSessionIds($userId);
+        $delivered = 0;
+        foreach ($sessionIds as $sessionId) {
+            self::deliver($sessionId, $data);
+            $delivered++;
+        }
+
+        return $delivered;
+    }
+
+    public static function deliverToAuthenticatedUsers(array $data): int
+    {
+        $sessionIds = self::getAllAuthenticatedSessionIds();
+        $delivered = 0;
+        foreach ($sessionIds as $sessionId) {
+            self::deliver($sessionId, $data);
+            $delivered++;
+        }
+
+        return $delivered;
     }
 
     private static function getCurrentWorkerId(): int
@@ -709,6 +695,68 @@ final class AsyncResourceSseServer
         return trim((string) ($cookie[$cookieName] ?? ''));
     }
 
+    private static function registerAuthenticatedSession(string $sessionId, string $userId): void
+    {
+        $pool = self::getRedisPool();
+        if ($pool === null) {
+            return;
+        }
+
+        $sessionId = trim($sessionId);
+        $userId = trim($userId);
+        if ($sessionId === '' || $userId === '') {
+            return;
+        }
+
+        $pool->withConnection(static function ($redis) use ($sessionId, $userId): void {
+            $redis->sadd(self::REDIS_AUTH_ALL_SESSIONS_KEY, [$sessionId]);
+            $redis->sadd(self::redisUserSessionsKey($userId), [$sessionId]);
+            $redis->setex(self::redisSessionUserKey($sessionId), self::AUTH_SESSION_TTL_SECONDS, $userId);
+            $redis->expire(self::REDIS_AUTH_ALL_SESSIONS_KEY, self::AUTH_SESSION_TTL_SECONDS);
+            $redis->expire(self::redisUserSessionsKey($userId), self::AUTH_SESSION_TTL_SECONDS);
+        });
+    }
+
+    private static function unregisterAuthenticatedSession(string $sessionId): void
+    {
+        $pool = self::getRedisPool();
+        if ($pool === null) {
+            return;
+        }
+
+        $sessionId = trim($sessionId);
+        if ($sessionId === '') {
+            return;
+        }
+
+        $pool->withConnection(static function ($redis) use ($sessionId): void {
+            $userId = trim((string) ($redis->get(self::redisSessionUserKey($sessionId)) ?? ''));
+            if ($userId !== '') {
+                $redis->srem(self::redisUserSessionsKey($userId), $sessionId);
+            }
+            $redis->srem(self::REDIS_AUTH_ALL_SESSIONS_KEY, $sessionId);
+            $redis->del(self::redisSessionUserKey($sessionId));
+            $redis->del(self::redisActiveSessionKey($sessionId));
+        });
+    }
+
+    private static function touchActiveSession(string $sessionId): void
+    {
+        $pool = self::getRedisPool();
+        if ($pool === null) {
+            return;
+        }
+
+        $sessionId = trim($sessionId);
+        if ($sessionId === '') {
+            return;
+        }
+
+        $pool->withConnection(static function ($redis) use ($sessionId): void {
+            $redis->setex(self::redisActiveSessionKey($sessionId), self::ACTIVE_SESSION_TTL_SECONDS, '1');
+        });
+    }
+
     private static function canUsePersistentDeferredSse(Request $request): bool
     {
         $config = IsomorphicConfig::fromEnvironment();
@@ -725,39 +773,153 @@ final class AsyncResourceSseServer
 
     private static function hasAuthenticatedSession(Request $request): bool
     {
+        return self::resolveAuthenticatedUserId($request) !== '';
+    }
+
+    private static function resolveAuthenticatedUserId(Request $request): string
+    {
         $cookieName = Environment::getEnvValue('SESSION_COOKIE_NAME') ?? 'semitexa_session';
         $cookie = is_array($request->cookie) ? $request->cookie : [];
         $sessionId = trim((string) ($cookie[$cookieName] ?? ''));
         if ($sessionId === '' || !preg_match('/^[a-f0-9]{32}$/', $sessionId)) {
-            return false;
+            return '';
         }
 
         try {
             $handler = self::createSessionHandler();
             $data = $handler->read($sessionId);
         } catch (\Throwable) {
-            return false;
+            return '';
         }
 
         $userId = $data[self::AUTH_SESSION_USER_KEY] ?? null;
-        return is_string($userId) && trim($userId) !== '';
+        return is_string($userId) ? trim($userId) : '';
     }
 
     private static function createSessionHandler(): SessionHandlerInterface
     {
-        $redisHost = Environment::getEnvValue('REDIS_HOST');
-        if ($redisHost !== null && $redisHost !== '') {
-            $pool = new \Semitexa\Core\Redis\RedisConnectionPool(1, [
-                'scheme' => (string) (Environment::getEnvValue('REDIS_SCHEME', 'tcp') ?? 'tcp'),
-                'host' => $redisHost,
-                'port' => (int) (Environment::getEnvValue('REDIS_PORT', '6379') ?? '6379'),
-                'password' => (string) (Environment::getEnvValue('REDIS_PASSWORD', '') ?? ''),
-            ]);
-
+        $pool = self::getRedisPool();
+        if ($pool !== null) {
             return new RedisSessionHandler($pool);
         }
 
         return new SwooleTableSessionHandler();
+    }
+
+    private static function getRedisPool(): ?RedisConnectionPool
+    {
+        try {
+            $container = ContainerFactory::get();
+            if ($container->has(RedisConnectionPool::class)) {
+                $pool = $container->get(RedisConnectionPool::class);
+                if ($pool instanceof RedisConnectionPool) {
+                    return $pool;
+                }
+            }
+        } catch (\Throwable) {
+        }
+
+        $redisHost = Environment::getEnvValue('REDIS_HOST');
+        if ($redisHost === null || $redisHost === '') {
+            return null;
+        }
+
+        return new RedisConnectionPool(1, [
+            'scheme' => (string) (Environment::getEnvValue('REDIS_SCHEME', 'tcp') ?? 'tcp'),
+            'host' => $redisHost,
+            'port' => (int) (Environment::getEnvValue('REDIS_PORT', '6379') ?? '6379'),
+            'password' => (string) (Environment::getEnvValue('REDIS_PASSWORD', '') ?? ''),
+        ]);
+    }
+
+    /** @return list<string> */
+    private static function getAuthenticatedUserSessionIds(string $userId): array
+    {
+        $pool = self::getRedisPool();
+        if ($pool === null) {
+            return [];
+        }
+
+        $userId = trim($userId);
+        if ($userId === '') {
+            return [];
+        }
+
+        return $pool->withConnection(static function ($redis) use ($userId): array {
+            $members = $redis->smembers(self::redisUserSessionsKey($userId));
+            return self::filterActiveSessionIds($redis, is_array($members) ? $members : [], $userId);
+        });
+    }
+
+    /** @return list<string> */
+    private static function getAllAuthenticatedSessionIds(): array
+    {
+        $pool = self::getRedisPool();
+        if ($pool === null) {
+            return [];
+        }
+
+        return $pool->withConnection(static function ($redis): array {
+            $members = $redis->smembers(self::REDIS_AUTH_ALL_SESSIONS_KEY);
+            return self::filterActiveSessionIds($redis, is_array($members) ? $members : []);
+        });
+    }
+
+    /**
+     * @param list<mixed> $sessionIds
+     * @return list<string>
+     */
+    private static function filterActiveSessionIds(object $redis, array $sessionIds, ?string $expectedUserId = null): array
+    {
+        $active = [];
+        foreach ($sessionIds as $rawSessionId) {
+            $sessionId = trim((string) $rawSessionId);
+            if ($sessionId === '') {
+                continue;
+            }
+
+            $mappedUserId = trim((string) ($redis->get(self::redisSessionUserKey($sessionId)) ?? ''));
+            $isActive = (string) ($redis->get(self::redisActiveSessionKey($sessionId)) ?? '') === '1';
+            if (
+                $mappedUserId === ''
+                || !$isActive
+                || ($expectedUserId !== null && $mappedUserId !== $expectedUserId)
+            ) {
+                $redis->srem(self::REDIS_AUTH_ALL_SESSIONS_KEY, $sessionId);
+                if ($expectedUserId !== null) {
+                    $redis->srem(self::redisUserSessionsKey($expectedUserId), $sessionId);
+                } elseif ($mappedUserId !== '') {
+                    $redis->srem(self::redisUserSessionsKey($mappedUserId), $sessionId);
+                }
+                $redis->del(self::redisSessionUserKey($sessionId));
+                $redis->del(self::redisActiveSessionKey($sessionId));
+                continue;
+            }
+
+            $active[] = $sessionId;
+        }
+
+        return $active;
+    }
+
+    private static function redisUserSessionsKey(string $userId): string
+    {
+        return self::REDIS_AUTH_USER_SESSIONS_PREFIX . trim($userId);
+    }
+
+    private static function redisSessionUserKey(string $sessionId): string
+    {
+        return self::REDIS_AUTH_SESSION_USER_PREFIX . trim($sessionId);
+    }
+
+    private static function redisSessionQueueKey(string $sessionId): string
+    {
+        return self::REDIS_SESSION_QUEUE_PREFIX . trim($sessionId);
+    }
+
+    private static function redisActiveSessionKey(string $sessionId): string
+    {
+        return self::REDIS_ACTIVE_SESSION_PREFIX . trim($sessionId);
     }
 
     private static function isSameOriginRequest(Request $request): bool
