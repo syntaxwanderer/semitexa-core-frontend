@@ -51,6 +51,11 @@ final class ModuleTemplateRegistry
         return self::$loader;
     }
 
+    public static function getCacheDir(): ?string
+    {
+        return self::getWritableCacheDir();
+    }
+
     private static function discoverModulePaths(): void
     {
         $modulesRoot = ProjectRoot::get() . '/src/modules';
@@ -456,14 +461,109 @@ final class ModuleTemplateRegistry
                 'current_url',
                 function (array $overrides = []) {
                     $ctx = \Semitexa\Core\Server\SwooleBootstrap::getCurrentSwooleRequestResponse();
-                    $path = $ctx !== null
-                        ? ($ctx[0]->server['request_uri'] ?? '/')
-                        : '/';
+                    $path = '/';
+                    if ($ctx !== null) {
+                        $request = $ctx[0];
+                        $server = [];
+                        foreach ((is_array($request->server) ? $request->server : []) as $key => $value) {
+                            if (is_string($key) && (is_scalar($value) || $value === null)) {
+                                $server[$key] = (string) $value;
+                            }
+                        }
+                        $requestUri = $server['request_uri'] ?? '/';
+                        $path = $requestUri !== '' ? $requestUri : '/';
+                    }
                     if (!empty($overrides)) {
                         $query = http_build_query($overrides);
-                        $path = strtok($path, '?') . '?' . $query;
+                        $basePath = parse_url($path, PHP_URL_PATH);
+                        $path = (is_string($basePath) && $basePath !== '' ? $basePath : '/') . '?' . $query;
                     }
                     return $path;
+                }
+            ));
+
+            self::$twig->addFunction(new TwigFunction(
+                'current_absolute_url',
+                function (array $overrides = []) {
+                    $ctx = \Semitexa\Core\Server\SwooleBootstrap::getCurrentSwooleRequestResponse();
+                    $path = '/';
+                    if ($ctx !== null) {
+                        $request = $ctx[0];
+                        $server = [];
+                        foreach ((is_array($request->server) ? $request->server : []) as $key => $value) {
+                            if (is_string($key) && (is_scalar($value) || $value === null)) {
+                                $server[$key] = (string) $value;
+                            }
+                        }
+                        $requestUri = $server['request_uri'] ?? '/';
+                        $path = $requestUri !== '' ? $requestUri : '/';
+                    }
+                    if (!empty($overrides)) {
+                        $query = http_build_query($overrides);
+                        $basePath = parse_url($path, PHP_URL_PATH);
+                        $path = (is_string($basePath) && $basePath !== '' ? $basePath : '/') . '?' . $query;
+                    }
+
+                    $origin = '';
+                    if ($ctx !== null) {
+                        $request = $ctx[0];
+                        $headers = [];
+                        foreach ((is_array($request->header) ? $request->header : []) as $key => $value) {
+                            if (is_string($key) && (is_scalar($value) || $value === null)) {
+                                $headers[$key] = (string) $value;
+                            }
+                        }
+                        $server = [];
+                        foreach ((is_array($request->server) ? $request->server : []) as $key => $value) {
+                            if (is_string($key) && (is_scalar($value) || $value === null)) {
+                                $server[$key] = (string) $value;
+                            }
+                        }
+
+                        $hostHeader = $headers['x-forwarded-host'] ?? $headers['host'] ?? '';
+                        $hostParts = array_values(array_filter(
+                            array_map(
+                                static fn (string $value): string => trim($value),
+                                explode(',', $hostHeader)
+                            ),
+                            static fn (string $value): bool => $value !== ''
+                        ));
+                        $host = $hostParts[0] ?? '';
+                        if ($host !== '') {
+                            $schemeHeader = $headers['x-forwarded-proto'] ?? '';
+                            $schemeParts = array_values(array_filter(
+                                array_map(
+                                    static fn (string $value): string => trim($value),
+                                    explode(',', $schemeHeader)
+                                ),
+                                static fn (string $value): bool => $value !== ''
+                            ));
+                            $scheme = $schemeParts[0] ?? '';
+                            if ($scheme === '') {
+                                $https = strtolower($server['https'] ?? '');
+                                $scheme = ($https === 'on' || $https === '1') ? 'https' : '';
+                            }
+                            if ($scheme === '') {
+                                $scheme = trim((string) (Environment::getEnvValue('APP_SCHEME') ?? 'http'));
+                            }
+                            $origin = sprintf('%s://%s', $scheme, $host);
+                        }
+                    }
+
+                    if ($origin === '') {
+                        $appUrl = trim((string) (Environment::getEnvValue('APP_URL') ?? ''));
+                        if ($appUrl !== '') {
+                            $origin = $appUrl;
+                        } else {
+                            $appHost = trim((string) (Environment::getEnvValue('APP_HOST') ?? ''));
+                            if ($appHost !== '') {
+                                $scheme = trim((string) (Environment::getEnvValue('APP_SCHEME') ?? 'http'));
+                                $origin = sprintf('%s://%s', $scheme, $appHost);
+                            }
+                        }
+                    }
+
+                    return $origin !== '' ? rtrim($origin, '/') . $path : $path;
                 }
             ));
         }
@@ -490,12 +590,22 @@ final class ModuleTemplateRegistry
                 'locale_switch_url',
                 function (string $targetLocale) use ($localeConfig): string {
                     $ctx = \Semitexa\Core\Server\SwooleBootstrap::getCurrentSwooleRequestResponse();
-                    $path = $ctx !== null
-                        ? ($ctx[0]->server['request_uri'] ?? '/')
-                        : '/';
+                    $path = '/';
+                    if ($ctx !== null) {
+                        $request = $ctx[0];
+                        $server = [];
+                        foreach ((is_array($request->server) ? $request->server : []) as $key => $value) {
+                            if (is_string($key) && (is_scalar($value) || $value === null)) {
+                                $server[$key] = (string) $value;
+                            }
+                        }
+                        $requestUri = $server['request_uri'] ?? '/';
+                        $path = $requestUri !== '' ? $requestUri : '/';
+                    }
 
                     // Strip query string
-                    $path = strtok($path, '?') ?: '/';
+                    $basePath = parse_url($path, PHP_URL_PATH);
+                    $path = is_string($basePath) && $basePath !== '' ? $basePath : '/';
 
                     // Strip existing locale prefix if present
                     $trimmed = ltrim($path, '/');

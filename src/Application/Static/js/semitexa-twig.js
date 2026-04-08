@@ -443,6 +443,11 @@
             self._setBindCookie(manifest);
             self._deferredCompleted = false;
             self._deferredLive = false;
+            self._fireEvent('semitexa:deferred:stream', {
+                phase: 'connecting',
+                requestId: manifest.requestId,
+                sessionId: manifest.sessionId
+            });
             var sseUrl = '/__semitexa_kiss?session_id=' + encodeURIComponent(manifest.sessionId)
                 + '&deferred_request_id=' + encodeURIComponent(manifest.requestId);
 
@@ -461,6 +466,21 @@
             var es = new EventSource(sseUrl);
             self._eventSource = es;
             self._connected = true;
+            var connectedSignaled = false;
+
+            function emitConnected() {
+                if (connectedSignaled) return;
+                connectedSignaled = true;
+                self._fireEvent('semitexa:deferred:stream', {
+                    phase: 'connected',
+                    requestId: manifest.requestId,
+                    sessionId: manifest.sessionId
+                });
+            }
+
+            es.onopen = function () {
+                emitConnected();
+            };
 
             es.onmessage = function (event) {
                 try {
@@ -484,13 +504,36 @@
                             es.close();
                             self._connected = false;
                         }
+                        self._fireEvent('semitexa:deferred:stream', {
+                            phase: 'done',
+                            requestId: manifest.requestId,
+                            sessionId: manifest.sessionId,
+                            live: !!payload.live,
+                            pendingSlots: pendingSlots.size
+                        });
                         return;
                     }
-                    if (payload.connected) return;
+                    if (payload.connected) {
+                        emitConnected();
+                        return;
+                    }
                     if (payload.type === 'deferred_block') {
                         pendingSlots.delete(payload.slot_id);
+                        self._fireEvent('semitexa:deferred:block', {
+                            requestId: manifest.requestId,
+                            sessionId: manifest.sessionId,
+                            slotId: payload.slot_id,
+                            mode: payload.mode || 'unknown'
+                        });
                         self._handleMessage(payload);
+                        return;
                     }
+                    self._fireEvent('semitexa:deferred:message', {
+                        requestId: manifest.requestId,
+                        sessionId: manifest.sessionId,
+                        eventName: payload.event || payload.type || 'message',
+                        payload: payload
+                    });
                 } catch (e) {
                     // ignore parse errors
                 }
@@ -502,6 +545,11 @@
                 }
                 es.close();
                 self._connected = false;
+                self._fireEvent('semitexa:deferred:stream', {
+                    phase: 'error',
+                    requestId: manifest.requestId,
+                    sessionId: manifest.sessionId
+                });
                 self._fallback(manifest);
             };
         },
@@ -520,6 +568,7 @@
 
             if (payload.mode === 'html') {
                 el.innerHTML = payload.html;
+                el.setAttribute('data-ssr-loaded', '1');
                 self._fireEvent('semitexa:block:rendered', {
                     block: el.firstElementChild || el,
                     slotId: payload.slot_id,
@@ -529,6 +578,7 @@
             } else if (payload.mode === 'template') {
                 self._fetchTemplate(payload.template).then(function (ast) {
                     el.innerHTML = render(ast, payload.data);
+                    el.setAttribute('data-ssr-loaded', '1');
                     self._fireEvent('semitexa:block:rendered', {
                         block: el.firstElementChild || el,
                         slotId: payload.slot_id,
@@ -585,6 +635,7 @@
                         var el = document.querySelector('[data-ssr-deferred="' + slotId + '"]');
                         if (el) {
                             el.innerHTML = data[slotId];
+                            el.setAttribute('data-ssr-loaded', '1');
                             self._fireEvent('semitexa:block:rendered', {
                                 block: el.firstElementChild || el,
                                 slotId: slotId,
@@ -600,18 +651,28 @@
         },
 
         _fallbackSlot: function (slotId) {
+            var self = this;
             var el = document.querySelector('[data-ssr-deferred="' + slotId + '"]');
             if (!el) return;
             var handleEl = document.querySelector('[data-ssr-handle]');
             var pageHandle = handleEl ? handleEl.getAttribute('data-ssr-handle') : '';
-            var requestId = this._manifest && this._manifest.requestId ? this._manifest.requestId : '';
+            var requestId = self._manifest && self._manifest.requestId ? self._manifest.requestId : '';
 
             fetch('/__semitexa_hug?handle=' + encodeURIComponent(pageHandle)
                 + '&slots=' + encodeURIComponent(slotId)
                 + (requestId ? '&deferred_request_id=' + encodeURIComponent(requestId) : ''))
                 .then(function (resp) { return resp.ok ? resp.json() : null; })
                 .then(function (data) {
-                    if (data && data[slotId]) el.innerHTML = data[slotId];
+                    if (data && data[slotId]) {
+                        el.innerHTML = data[slotId];
+                        el.setAttribute('data-ssr-loaded', '1');
+                        self._fireEvent('semitexa:block:rendered', {
+                            block: el.firstElementChild || el,
+                            slotId: slotId,
+                            mode: 'fallback',
+                            renderTimeMs: 0
+                        });
+                    }
                 })
                 .catch(function () {});
         },

@@ -148,6 +148,7 @@ class HtmlResponse extends ResourceResponse
 
         try {
             $html = ModuleTemplateRegistry::getTwig()->render($tmpl, $context);
+            $html = $this->finalizeIsomorphicHtml($html, $context);
             $this->setContent($html);
         } finally {
             PageRenderContextStore::reset();
@@ -171,6 +172,7 @@ class HtmlResponse extends ResourceResponse
         $twig = ModuleTemplateRegistry::getTwig();
         $template = $twig->createTemplate($templateSource);
         $html = $template->render($context);
+        $html = $this->finalizeIsomorphicHtml($html, $context);
         $this->setContent($html);
         return $this;
     }
@@ -348,6 +350,7 @@ class HtmlResponse extends ResourceResponse
         $context['__ssr_deferred_slots'] = $deferredSlots;
         $context['__ssr_deferred_request_id'] = $requestId;
         $context['__ssr_deferred_session_id'] = $sessionId;
+        $context['__ssr_deferred_bind_token'] = $bindToken;
         $context['__ssr_preload_hints'] = PlaceholderRenderer::renderPreloadHints($deferredSlots);
         $context['__ssr_deferred_manifest'] = PlaceholderRenderer::renderManifest(
             $requestId,
@@ -359,6 +362,44 @@ class HtmlResponse extends ResourceResponse
         $context['__ssr_handle_attr'] = ' data-ssr-handle="' . htmlspecialchars($handle, ENT_QUOTES, 'UTF-8') . '"';
 
         return $context;
+    }
+
+    /**
+     * @param array<string, mixed> $context
+     */
+    private function finalizeIsomorphicHtml(string $html, array $context): string
+    {
+        $requestId = $context['__ssr_deferred_request_id'] ?? null;
+        if (!is_string($requestId) || $requestId === '') {
+            return $html;
+        }
+
+        $renderedSlots = PlaceholderRenderer::filterRenderedSlotsFromHtml(
+            $html,
+            array_values(array_filter(
+                is_array($context['__ssr_deferred_slots'] ?? null) ? $context['__ssr_deferred_slots'] : [],
+                static fn (mixed $slot): bool => $slot instanceof \Semitexa\Ssr\Domain\Model\DeferredSlotDefinition
+            ))
+        );
+        try {
+            $renderedSlotIds = array_map(static fn ($slot) => $slot->slotId, $renderedSlots);
+            DeferredRequestRegistry::updateSlots($requestId, $renderedSlotIds);
+
+            $updatedPreloadHints = PlaceholderRenderer::renderPreloadHints($renderedSlots);
+            $updatedManifest = PlaceholderRenderer::renderManifest(
+                $requestId,
+                is_string($context['__ssr_deferred_session_id'] ?? null) ? $context['__ssr_deferred_session_id'] : '',
+                $renderedSlots,
+                is_string($context['__ssr_deferred_bind_token'] ?? null) ? $context['__ssr_deferred_bind_token'] : '',
+            );
+
+            $html = str_replace(is_string($context['__ssr_preload_hints'] ?? null) ? $context['__ssr_preload_hints'] : '', $updatedPreloadHints, $html);
+            $html = str_replace(is_string($context['__ssr_deferred_manifest'] ?? null) ? $context['__ssr_deferred_manifest'] : '', $updatedManifest, $html);
+        } catch (\Throwable $e) {
+            error_log('Failed to finalize deferred SSR HTML: ' . $e->getMessage());
+        }
+
+        return $html;
     }
 
     /**

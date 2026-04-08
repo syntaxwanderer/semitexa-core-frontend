@@ -118,6 +118,25 @@ final class PlaceholderRenderer
     }
 
     /**
+     * @param DeferredSlotDefinition[] $slots
+     *
+     * @return DeferredSlotDefinition[]
+     */
+    public static function filterRenderedSlotsFromHtml(string $html, array $slots): array
+    {
+        if ($slots === [] || !preg_match_all('/data-ssr-deferred="([^"]+)"/', $html, $matches)) {
+            return [];
+        }
+
+        $renderedIds = array_fill_keys(array_map('html_entity_decode', $matches[1]), true);
+
+        return array_values(array_filter(
+            $slots,
+            static fn (DeferredSlotDefinition $slot): bool => isset($renderedIds[$slot->slotId])
+        ));
+    }
+
+    /**
      * Generate the <script defer> tag for the semitexa-twig.js runtime.
      *
      * Served via the standard static asset path. The ?v= query parameter
