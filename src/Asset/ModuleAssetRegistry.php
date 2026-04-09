@@ -188,6 +188,7 @@ class ModuleAssetRegistry
             $env = Environment::create();
             return $env->get('THEME', '');
         } catch (\Throwable) {
+            // Environment may not be available in all contexts — fall back to no theme
             return '';
         }
     }

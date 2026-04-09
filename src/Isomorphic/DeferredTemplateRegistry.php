@@ -7,6 +7,7 @@ namespace Semitexa\Ssr\Isomorphic;
 use Semitexa\Core\Support\ProjectRoot;
 use Semitexa\Ssr\Asset\ModuleAssetRegistry;
 use Semitexa\Ssr\Configuration\IsomorphicConfig;
+use Semitexa\Core\Log\StaticLoggerBridge;
 use Semitexa\Ssr\Layout\LayoutSlotRegistry;
 use Semitexa\Ssr\Template\ModuleTemplateRegistry;
 
@@ -44,10 +45,9 @@ final class DeferredTemplateRegistry
         if (!is_dir($outputDir)) {
             $created = @mkdir($outputDir, 0755, true);
             if (!$created && !is_dir($outputDir)) {
-                error_log(sprintf(
-                    'Deferred template publishing skipped: unable to create output directory "%s".',
-                    $outputDir,
-                ));
+                StaticLoggerBridge::warning('ssr', 'Deferred template publishing skipped: unable to create output directory', [
+                    'directory' => $outputDir,
+                ]);
                 return;
             }
         }
@@ -170,6 +170,7 @@ final class DeferredTemplateRegistry
             $source = $loader->getSourceContext($templateName);
             return $source->getPath();
         } catch (\Throwable) {
+            // Template source resolution is best-effort — may not exist yet
             return null;
         }
     }
@@ -202,10 +203,9 @@ final class DeferredTemplateRegistry
         if (!is_dir($outputDir)) {
             $created = @mkdir($outputDir, 0755, true);
             if (!$created && !is_dir($outputDir)) {
-                error_log(sprintf(
-                    'Deferred template publishing skipped: unable to create output directory "%s".',
-                    $outputDir,
-                ));
+                StaticLoggerBridge::warning('ssr', 'Deferred template publishing skipped: unable to create output directory', [
+                    'directory' => $outputDir,
+                ]);
                 return null;
             }
         }

@@ -279,16 +279,8 @@ final class AsyncResourceSseServer
     {
         $registry = \Semitexa\Ssr\Isomorphic\DeferredRequestRegistry::consume($deferredRequestId);
 
-        $debugEnabled = filter_var((string) (\getenv('APP_DEBUG') ?: (\getenv('DEBUG') ?: '0')), \FILTER_VALIDATE_BOOLEAN);
-        $debugLog = static function (string $msg, array $data = []) use ($debugEnabled): void {
-            if (!$debugEnabled) {
-                return;
-            }
-
-            $entry = json_encode(['ssr_sse' => $msg] + $data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-            if ($entry !== false) {
-                error_log($entry);
-            }
+        $debugLog = static function (string $msg, array $data = []): void {
+            \Semitexa\Core\Log\StaticLoggerBridge::debug('ssr', $msg, $data);
         };
 
         if ($registry === null) {
@@ -329,7 +321,11 @@ final class AsyncResourceSseServer
                     );
                 } catch (\Throwable $e) {
                     $debugLog('streaming_failed', ['error' => $e->getMessage(), 'trace' => substr($e->getTraceAsString(), 0, 500)]);
-                    error_log("[Semitexa SSR] Deferred block streaming failed: {$e->getMessage()}");
+                    \Semitexa\Core\Log\StaticLoggerBridge::error('ssr', 'Deferred block streaming failed', [
+                        'session_id' => $sessionId,
+                        'exception' => $e::class,
+                        'message' => $e->getMessage(),
+                    ]);
                     self::deliver($sessionId, [
                         'type' => 'done',
                         'live' => false,
@@ -354,7 +350,11 @@ final class AsyncResourceSseServer
                 );
             } catch (\Throwable $e) {
                 $debugLog('streaming_failed_sync', ['error' => $e->getMessage()]);
-                error_log("[Semitexa SSR] Deferred block streaming failed (sync): {$e->getMessage()}");
+                \Semitexa\Core\Log\StaticLoggerBridge::error('ssr', 'Deferred block streaming failed (sync)', [
+                    'session_id' => $sessionId,
+                    'exception' => $e::class,
+                    'message' => $e->getMessage(),
+                ]);
                 self::deliver($sessionId, [
                     'type' => 'done',
                     'live' => false,
@@ -380,11 +380,11 @@ final class AsyncResourceSseServer
                     return is_string($value) && $value !== '' ? $value : null;
                 });
             } catch (\Throwable $e) {
-                error_log(sprintf(
-                    '[Semitexa SSR] Redis SSE dequeue failed for session %s: %s',
-                    $sessionId,
-                    $e->getMessage(),
-                ));
+                \Semitexa\Core\Log\StaticLoggerBridge::error('ssr', 'Redis SSE dequeue failed', [
+                    'session_id' => $sessionId,
+                    'exception' => $e::class,
+                    'message' => $e->getMessage(),
+                ]);
                 return false;
             }
 
@@ -406,11 +406,11 @@ final class AsyncResourceSseServer
                         $redis->expire($queueKey, self::REDIS_SESSION_QUEUE_TTL_SECONDS);
                     });
                 } catch (\Throwable $e) {
-                    error_log(sprintf(
-                        '[Semitexa SSR] Redis SSE requeue failed for session %s: %s',
-                        $sessionId,
-                        $e->getMessage(),
-                    ));
+                    \Semitexa\Core\Log\StaticLoggerBridge::error('ssr', 'Redis SSE requeue failed', [
+                        'session_id' => $sessionId,
+                        'exception' => $e::class,
+                        'message' => $e->getMessage(),
+                    ]);
                 }
                 return true;
             }
@@ -565,11 +565,11 @@ final class AsyncResourceSseServer
                     });
                     return;
                 } catch (\Throwable $e) {
-                    error_log(sprintf(
-                        '[Semitexa SSR] Redis SSE enqueue failed for session %s: %s',
-                        $sessionId,
-                        $e->getMessage(),
-                    ));
+                    \Semitexa\Core\Log\StaticLoggerBridge::error('ssr', 'Redis SSE enqueue failed', [
+                        'session_id' => $sessionId,
+                        'exception' => $e::class,
+                        'message' => $e->getMessage(),
+                    ]);
                 }
             }
         }
@@ -779,11 +779,11 @@ final class AsyncResourceSseServer
                 $redis->expire(self::redisUserSessionsKey($userId), self::AUTH_SESSION_TTL_SECONDS);
             });
         } catch (\Throwable $e) {
-            error_log(sprintf(
-                '[Semitexa SSR] Failed to register authenticated SSE session %s: %s',
-                $sessionId,
-                $e->getMessage(),
-            ));
+            \Semitexa\Core\Log\StaticLoggerBridge::error('ssr', 'Failed to register authenticated SSE session', [
+                'session_id' => $sessionId,
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
         }
     }
 
@@ -811,11 +811,11 @@ final class AsyncResourceSseServer
                 $redis->del(self::redisActiveSessionKey($sessionId));
             });
         } catch (\Throwable $e) {
-            error_log(sprintf(
-                '[Semitexa SSR] Failed to unregister authenticated SSE session %s: %s',
-                $sessionId,
-                $e->getMessage(),
-            ));
+            \Semitexa\Core\Log\StaticLoggerBridge::error('ssr', 'Failed to unregister authenticated SSE session', [
+                'session_id' => $sessionId,
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
         }
     }
 
@@ -837,11 +837,11 @@ final class AsyncResourceSseServer
                 $redis->setex(self::redisActiveSessionKey($sessionId), self::ACTIVE_SESSION_TTL_SECONDS, '1');
             });
         } catch (\Throwable $e) {
-            error_log(sprintf(
-                '[Semitexa SSR] Failed to touch active SSE session %s: %s',
-                $sessionId,
-                $e->getMessage(),
-            ));
+            \Semitexa\Core\Log\StaticLoggerBridge::error('ssr', 'Failed to touch active SSE session', [
+                'session_id' => $sessionId,
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
         }
     }
 
@@ -957,11 +957,11 @@ final class AsyncResourceSseServer
                 return self::filterActiveSessionIds($redis, array_values($members), $userId);
             });
         } catch (\Throwable $e) {
-            error_log(sprintf(
-                '[Semitexa SSR] Failed to get authenticated user session IDs for user %s: %s',
-                $userId,
-                $e->getMessage(),
-            ));
+            \Semitexa\Core\Log\StaticLoggerBridge::error('ssr', 'Failed to get authenticated user session IDs', [
+                'user_id' => $userId,
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
             return [];
         }
     }
@@ -981,7 +981,10 @@ final class AsyncResourceSseServer
                 return self::filterActiveSessionIds($redis, array_values($members));
             });
         } catch (\Throwable $e) {
-            error_log('[Semitexa SSR] Failed to get all authenticated session IDs: ' . $e->getMessage());
+            \Semitexa\Core\Log\StaticLoggerBridge::error('ssr', 'Failed to get all authenticated session IDs', [
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
             return [];
         }
     }

@@ -5,6 +5,7 @@
     <title>{% block title %}{{ title|default('Semitexa') }}{% endblock %}</title>
     {{ semantic_head() }}
     {{ asset_head() }}
+    {{ inject_scripts('head') }}
     {% block head_extra %}{{ layout_slot('head_extra') }}{% endblock %}
   </head>
   <body{{ __ssr_handle_attr|default('')|raw }}>
@@ -22,6 +23,7 @@
       {% block footer %}{{ layout_slot('footer') }}{{ footer|default('')|raw }}{{ layout_slot('footer_after') }}{% endblock %}
     </footer>
     {{ asset_body() }}
+    {{ inject_scripts('body') }}
   </body>
 </html>
 
