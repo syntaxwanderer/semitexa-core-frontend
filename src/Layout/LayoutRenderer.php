@@ -141,12 +141,17 @@ class LayoutRenderer
         } catch (\Throwable $e) {
             $debugEnabled = filter_var(\Semitexa\Core\Environment::getEnvValue('APP_DEBUG', '0'), FILTER_VALIDATE_BOOLEAN);
 
-            SsrLogger::error('Error rendering layout', [
+            $logContext = [
                 'handle' => $handle,
                 'exception' => $e::class,
                 'message' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
+            ];
+
+            if ($debugEnabled) {
+                $logContext['trace'] = $e->getTraceAsString();
+            }
+
+            SsrLogger::error('Error rendering layout', $logContext);
 
             if ($debugEnabled) {
                 return '<!doctype html><html><head><meta charset="utf-8"><title>'

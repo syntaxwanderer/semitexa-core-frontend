@@ -7,7 +7,6 @@ namespace Semitexa\Ssr\Application\Service;
 use Semitexa\Core\Attribute\AsService;
 use Semitexa\Core\Attribute\InjectAsReadonly;
 use Semitexa\Core\Log\LoggerInterface;
-use Semitexa\Ssr\Log\SsrLogger;
 use Semitexa\Ssr\Async\SseAsyncResultDelivery;
 use Semitexa\Ssr\Configuration\IsomorphicConfig;
 use Semitexa\Ssr\Domain\Model\DeferredBlockPayload;

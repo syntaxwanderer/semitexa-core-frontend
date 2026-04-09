@@ -13,7 +13,8 @@ use Semitexa\Core\Log\LoggerInterface;
  * use property injection. This thin accessor is set once during bootstrap and provides
  * a nullable logger to all static call sites.
  *
- * Falls back to error_log() when no logger is configured (e.g. during tests).
+ * Falls back to error_log() for error() and warning() when no logger is configured
+ * (e.g. during tests). Debug messages are silently dropped in that case.
  */
 final class SsrLogger
 {
@@ -29,24 +30,33 @@ final class SsrLogger
         return self::$logger;
     }
 
+    /**
+     * @param array<array-key, mixed> $context
+     */
     public static function error(string $message, array $context = []): void
     {
         if (self::$logger !== null) {
             self::$logger->error($message, $context);
             return;
         }
-        error_log('[Semitexa SSR] ' . $message);
+        error_log(self::formatFallbackMessage($message, $context));
     }
 
+    /**
+     * @param array<array-key, mixed> $context
+     */
     public static function warning(string $message, array $context = []): void
     {
         if (self::$logger !== null) {
             self::$logger->warning($message, $context);
             return;
         }
-        error_log('[Semitexa SSR] ' . $message);
+        error_log(self::formatFallbackMessage($message, $context));
     }
 
+    /**
+     * @param array<array-key, mixed> $context
+     */
     public static function debug(string $message, array $context = []): void
     {
         if (self::$logger !== null) {
@@ -59,5 +69,20 @@ final class SsrLogger
     public static function reset(): void
     {
         self::$logger = null;
+    }
+
+    /**
+     * @param array<array-key, mixed> $context
+     */
+    private static function formatFallbackMessage(string $message, array $context): string
+    {
+        if ($context === []) {
+            return '[Semitexa SSR] ' . $message;
+        }
+
+        $encoded = json_encode($context, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $suffix = is_string($encoded) ? ' context=' . $encoded : '';
+
+        return '[Semitexa SSR] ' . $message . $suffix;
     }
 }
