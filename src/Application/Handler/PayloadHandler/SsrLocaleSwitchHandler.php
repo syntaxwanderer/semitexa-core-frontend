@@ -8,6 +8,7 @@ use Semitexa\Core\Attribute\AsPayloadHandler;
 use Semitexa\Core\Attribute\InjectAsMutable;
 use Semitexa\Core\Attribute\InjectAsReadonly;
 use Semitexa\Core\Contract\TypedHandlerInterface;
+use Semitexa\Core\Log\LoggerInterface;
 use Semitexa\Core\Exception\NotFoundException;
 use Semitexa\Core\Http\Response\ResourceResponse;
 use Semitexa\Core\Request;
@@ -25,6 +26,9 @@ final class SsrLocaleSwitchHandler implements TypedHandlerInterface
 
     #[InjectAsMutable]
     protected Request $request;
+
+    #[InjectAsReadonly]
+    protected LoggerInterface $logger;
 
     public function handle(SsrLocaleSwitchPayload $payload, ResourceResponse $resource): ResourceResponse
     {
@@ -78,7 +82,12 @@ final class SsrLocaleSwitchHandler implements TypedHandlerInterface
                         startLiveLoop: false,
                     );
                 } catch (\Throwable $e) {
-                    error_log("[Semitexa SSR] Locale switch failed: {$e->getMessage()}");
+                    $this->logger->error('SSR locale switch failed', [
+                        'locale' => $locale,
+                        'session_id' => $sessionId,
+                        'exception' => $e::class,
+                        'message' => $e->getMessage(),
+                    ]);
                 }
             });
         } else {

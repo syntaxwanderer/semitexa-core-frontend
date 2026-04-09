@@ -59,7 +59,11 @@ final class DataProviderRegistry
                 $instance = new $entry['class']();
             }
         } catch (\Throwable $e) {
-            error_log("DataProviderRegistry: Failed to instantiate {$entry['class']}: " . $e->getMessage());
+            \Semitexa\Ssr\Log\SsrLogger::error('DataProviderRegistry: Failed to instantiate provider', [
+                'class' => $entry['class'],
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
             return null;
         }
 

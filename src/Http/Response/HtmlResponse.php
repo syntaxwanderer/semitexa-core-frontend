@@ -396,7 +396,10 @@ class HtmlResponse extends ResourceResponse
             $html = str_replace(is_string($context['__ssr_preload_hints'] ?? null) ? $context['__ssr_preload_hints'] : '', $updatedPreloadHints, $html);
             $html = str_replace(is_string($context['__ssr_deferred_manifest'] ?? null) ? $context['__ssr_deferred_manifest'] : '', $updatedManifest, $html);
         } catch (\Throwable $e) {
-            error_log('Failed to finalize deferred SSR HTML: ' . $e->getMessage());
+            \Semitexa\Ssr\Log\SsrLogger::error('Failed to finalize deferred SSR HTML', [
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
         }
 
         return $html;

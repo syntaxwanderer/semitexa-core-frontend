@@ -43,4 +43,15 @@ final class HtmlResponseSeoDefaultsTest extends TestCase
         self::assertSame('See how Semitexa resolves the active tenant from subdomain, header, path, or query input.', SeoMeta::get('og:description'));
         self::assertSame('website', SeoMeta::get('og:type'));
     }
+
+    #[Test]
+    public function twig_environment_exposes_inject_scripts_function(): void
+    {
+        ModuleTemplateRegistry::setModuleRegistry(new ModuleRegistry());
+        TwigExtensionRegistry::setClassDiscovery(new ClassDiscovery());
+
+        $twig = ModuleTemplateRegistry::getTwig();
+
+        self::assertNotFalse($twig->getFunction('inject_scripts'));
+    }
 }

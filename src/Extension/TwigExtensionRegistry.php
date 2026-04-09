@@ -6,6 +6,7 @@ namespace Semitexa\Ssr\Extension;
 
 use Semitexa\Core\Discovery\ClassDiscovery;
 use Semitexa\Ssr\Attribute\AsTwigExtension;
+use Semitexa\Ssr\Log\SsrLogger;
 use Twig\TwigFunction;
 use Twig\TwigFilter;
 
@@ -55,7 +56,11 @@ final class TwigExtensionRegistry
                     $extension->registerFilters();
                 }
             } catch (\Throwable $e) {
-                error_log("Failed to load Twig extension {$class}: " . $e->getMessage());
+                SsrLogger::error('Failed to load Twig extension', [
+                    'class' => $class,
+                    'exception' => $e::class,
+                    'message' => $e->getMessage(),
+                ]);
             }
         }
 

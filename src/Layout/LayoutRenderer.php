@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Semitexa\Ssr\Layout;
 
 use Semitexa\Ssr\Configuration\IsomorphicConfig;
+use Semitexa\Ssr\Log\SsrLogger;
 use Semitexa\Ssr\Context\IsomorphicContextStore;
 use Semitexa\Ssr\Context\PageRenderContextStore;
 use Semitexa\Ssr\Isomorphic\DeferredRequestRegistry;
@@ -128,18 +129,35 @@ class LayoutRenderer
                     $html = str_replace((string) ($baseContext['__ssr_preload_hints'] ?? ''), $updatedPreloadHints, $html);
                     $html = str_replace((string) ($baseContext['__ssr_deferred_manifest'] ?? ''), $updatedManifest, $html);
                 } catch (\Throwable $e) {
-                    error_log("Failed to finalize deferred SSR slots for layout '{$handle}': " . $e->getMessage());
+                    SsrLogger::error('Failed to finalize deferred SSR slots', [
+                        'handle' => $handle,
+                        'exception' => $e::class,
+                        'message' => $e->getMessage(),
+                    ]);
                 }
             }
 
             return $html;
         } catch (\Throwable $e) {
-            error_log("Error rendering layout '{$handle}': " . $e->getMessage());
-            return '<!doctype html><html><head><meta charset="utf-8"><title>'
-                . htmlspecialchars($handle)
-                . '</title></head><body><main><pre>'
-                . htmlspecialchars($e->getMessage())
-                . '</pre></main></body></html>';
+            $debugEnabled = filter_var(\Semitexa\Core\Environment::getEnvValue('APP_DEBUG', '0'), FILTER_VALIDATE_BOOLEAN);
+
+            SsrLogger::error('Error rendering layout', [
+                'handle' => $handle,
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            if ($debugEnabled) {
+                return '<!doctype html><html><head><meta charset="utf-8"><title>'
+                    . htmlspecialchars($handle)
+                    . '</title></head><body><main><pre>'
+                    . htmlspecialchars($e->getMessage())
+                    . '</pre></main></body></html>';
+            }
+
+            return '<!doctype html><html><head><meta charset="utf-8"><title>Internal Server Error</title>'
+                . '</head><body><main><p>An unexpected error occurred.</p></main></body></html>';
         } finally {
             PageRenderContextStore::reset();
         }

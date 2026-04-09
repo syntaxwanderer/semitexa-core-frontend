@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Semitexa\Ssr\Layout;
 
 use Semitexa\Core\Container\ContainerFactory;
-use Semitexa\Core\Environment;
 use Semitexa\Ssr\Contract\TypedSlotHandlerInterface;
 use Semitexa\Ssr\Http\Response\HtmlSlotResponse;
+use Semitexa\Ssr\Log\SsrLogger;
 
 /**
  * Executes all registered slot handlers for a slot resource in priority order.
@@ -34,12 +34,12 @@ final class SlotHandlerPipeline
                 }
                 $slot = $result;
             } catch (\Throwable $e) {
-                if (Environment::getEnvValue('APP_DEBUG') === '1') {
-                    error_log(
-                        "[Semitexa] SlotHandlerPipeline error in '{$handlerClass}' for slot '{$slotClass}': "
-                        . $e->getMessage()
-                    );
-                }
+                SsrLogger::debug('SlotHandlerPipeline error', [
+                    'handler' => $handlerClass,
+                    'slot' => $slotClass,
+                    'exception' => $e::class,
+                    'message' => $e->getMessage(),
+                ]);
             }
         }
 

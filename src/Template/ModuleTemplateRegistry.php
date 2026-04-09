@@ -667,6 +667,7 @@ final class ModuleTemplateRegistry
             $path = $source->getPath();
             return ($path !== '' && is_file($path)) ? $path : null;
         } catch (\Throwable) {
+            // Template may not exist or loader may not be initialized — return null
             return null;
         }
     }

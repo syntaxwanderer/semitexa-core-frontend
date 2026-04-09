@@ -6,6 +6,8 @@ namespace Semitexa\Ssr\Application\Service;
 
 use Semitexa\Core\Attribute\AsService;
 use Semitexa\Core\Attribute\InjectAsReadonly;
+use Semitexa\Core\Log\LoggerInterface;
+use Semitexa\Ssr\Log\SsrLogger;
 use Semitexa\Ssr\Async\SseAsyncResultDelivery;
 use Semitexa\Ssr\Configuration\IsomorphicConfig;
 use Semitexa\Ssr\Domain\Model\DeferredBlockPayload;
@@ -24,6 +26,9 @@ final class DeferredBlockOrchestrator
 {
     #[InjectAsReadonly]
     protected DataProviderRegistry $dataProviderRegistry;
+
+    #[InjectAsReadonly]
+    protected LoggerInterface $logger;
 
     /**
      * Called after SSE connection established.
@@ -46,7 +51,7 @@ final class DeferredBlockOrchestrator
             ? array_values(array_filter($slots, static fn (DeferredSlotDefinition $s) => $s->refreshInterval > 0))
             : [];
 
-        self::debugLog('stream_start', [
+        $this->debugLog('stream_start', [
             'page_handle' => $pageHandle,
             'slot_count' => count($slots),
             'slots' => array_map(static fn ($s) => $s->slotId, $slots),
@@ -97,7 +102,11 @@ final class DeferredBlockOrchestrator
                     $this->applyLocale($locale);
                     $data = $this->resolveSlotData($slot, $pageHandle, $pageContext);
                 } catch (\Throwable $e) {
-                    error_log("DataProvider failed for slot {$slot->slotId}: {$e->getMessage()}");
+                    $this->logger->error('DataProvider failed for slot', [
+                        'slot_id' => $slot->slotId,
+                        'exception' => $e::class,
+                        'message' => $e->getMessage(),
+                    ]);
                 }
                 $results[] = [$slot, $data];
             }
@@ -148,7 +157,11 @@ final class DeferredBlockOrchestrator
                     $this->applyLocale($locale);
                     $data = $this->resolveSlotData($slot, $pageHandle, $pageContext);
                 } catch (\Throwable $e) {
-                    error_log("DataProvider failed for slot {$slot->slotId}: {$e->getMessage()}");
+                    $this->logger->error('DataProvider failed for slot', [
+                        'slot_id' => $slot->slotId,
+                        'exception' => $e::class,
+                        'message' => $e->getMessage(),
+                    ]);
                 } finally {
                     if ($channel !== null) {
                         $channel->push([$slot, $data]);
@@ -217,7 +230,11 @@ final class DeferredBlockOrchestrator
             $this->applyLocale($locale);
             return $this->resolveSlotData($slot, $pageHandle, $pageContext);
         } catch (\Throwable $e) {
-            error_log("DataProvider failed for slot {$slot->slotId}: {$e->getMessage()}");
+            $this->logger->error('DataProvider failed for slot', [
+                'slot_id' => $slot->slotId,
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
             return [];
         }
     }
@@ -248,7 +265,11 @@ final class DeferredBlockOrchestrator
                 $twig = ModuleTemplateRegistry::getTwig();
                 $result[$slot->slotId] = $twig->render($slot->templateName, $data);
             } catch (\Throwable $e) {
-                error_log("DeferredBlockOrchestrator sync render failed for slot {$slot->slotId}: {$e->getMessage()}");
+                $this->logger->error('Deferred block sync render failed', [
+                    'slot_id' => $slot->slotId,
+                    'exception' => $e::class,
+                    'message' => $e->getMessage(),
+                ]);
             }
         }
 
@@ -303,7 +324,11 @@ final class DeferredBlockOrchestrator
                     $this->applyLocale($locale);
                     $data = $this->resolveSlotData($slot, $pageHandle, $pageContext);
                 } catch (\Throwable $e) {
-                    error_log("[Semitexa SSR] Live slot refresh failed for {$slot->slotId}: {$e->getMessage()}");
+                    $this->logger->error('Live slot refresh failed', [
+                        'slot_id' => $slot->slotId,
+                        'exception' => $e::class,
+                        'message' => $e->getMessage(),
+                    ]);
                     $data = [];
                 }
 
@@ -358,7 +383,11 @@ final class DeferredBlockOrchestrator
         try {
             return ModuleTemplateRegistry::getTwig()->render($slot->templateName, $data);
         } catch (\Throwable $e) {
-            error_log("Twig render failed for deferred slot {$slot->slotId}: {$e->getMessage()}");
+            $this->logger->error('Twig render failed for deferred slot', [
+                'slot_id' => $slot->slotId,
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
             return '';
         }
     }
@@ -400,20 +429,8 @@ final class DeferredBlockOrchestrator
         }
     }
 
-    private static function debugLog(string $message, array $data = []): void
+    private function debugLog(string $message, array $data = []): void
     {
-        if (!self::debugEnabled()) {
-            return;
-        }
-
-        $entry = json_encode(['ssr_orchestrator' => $message] + $data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        if ($entry !== false) {
-            error_log($entry);
-        }
-    }
-
-    private static function debugEnabled(): bool
-    {
-        return filter_var((string) (\getenv('APP_DEBUG') ?? \getenv('DEBUG') ?? '0'), \FILTER_VALIDATE_BOOLEAN);
+        $this->logger->debug($message, $data);
     }
 }
