@@ -1,0 +1,45 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Semitexa\Ssr\Seo\Sitemap\Job;
+
+use Semitexa\Core\Attribute\InjectAsReadonly;
+use Semitexa\Core\Support\ProjectRoot;
+use Semitexa\Scheduler\Attribute\AsScheduledJob;
+use Semitexa\Scheduler\Contract\ScheduledJobInterface;
+use Semitexa\Scheduler\Domain\Value\ScheduledJobContext;
+use Semitexa\Ssr\Seo\AiSitemapLocator;
+use Semitexa\Ssr\Seo\Sitemap\SitemapGenerationContext;
+use Semitexa\Ssr\Seo\Sitemap\SitemapGenerator;
+
+/**
+ * Regenerates sitemap.xml on a daily schedule.
+ *
+ * Requires the semitexa/scheduler package. If the scheduler is not installed,
+ * this class is never instantiated (auto-discovery skips it).
+ */
+#[AsScheduledJob(
+    key: 'ssr.sitemap_regeneration',
+    cronExpression: '0 3 * * *',
+    overlapPolicy: 'skip',
+)]
+final class SitemapRegenerationJob implements ScheduledJobInterface
+{
+    #[InjectAsReadonly]
+    protected ?SitemapGenerator $generator = null;
+
+    public function handle(ScheduledJobContext $context): void
+    {
+        if ($this->generator === null) {
+            return;
+        }
+
+        $baseUrl = AiSitemapLocator::originUrl();
+        $outputDir = ProjectRoot::get() . '/var/sitemap';
+
+        $generationContext = new SitemapGenerationContext(baseUrl: $baseUrl);
+
+        $this->generator->generateAndWrite($generationContext, $outputDir);
+    }
+}

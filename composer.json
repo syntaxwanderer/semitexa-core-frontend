@@ -15,6 +15,9 @@
     "semitexa/locale": "*",
     "semitexa/tenancy": "*"
   },
+  "suggest": {
+    "semitexa/scheduler": "Required for automatic scheduled sitemap regeneration (daily cron job)"
+  },
   "autoload": {
     "psr-4": {
       "Semitexa\\Ssr\\": "src/"
