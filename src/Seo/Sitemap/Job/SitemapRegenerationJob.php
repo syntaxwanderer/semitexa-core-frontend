@@ -36,7 +36,7 @@ final class SitemapRegenerationJob implements ScheduledJobInterface
         }
 
         $baseUrl = AiSitemapLocator::originUrl();
-        $outputDir = ProjectRoot::get() . '/var/sitemap';
+        $outputDir = ProjectRoot::get() . '/var/sitemap/default';
 
         $generationContext = new SitemapGenerationContext(baseUrl: $baseUrl);
 
