@@ -431,7 +431,8 @@ final class AsyncResourceSseServer
             $line .= 'id: ' . $safeId . "\n";
         }
         if (isset($data['event']) && $data['event'] !== '') {
-            $line .= "event: message\n";
+            $safeEvent = str_replace(["\r", "\n"], '', (string) $data['event']);
+            $line .= 'event: ' . $safeEvent . "\n";
         }
         $line .= "data: " . json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n\n";
         return @$response->write($line);
