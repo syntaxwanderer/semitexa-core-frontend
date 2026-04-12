@@ -12,8 +12,12 @@
   "require": {
     "php": "^8.4",
     "twig/twig": "^3.10",
+    "semitexa/scheduler": "*",
     "semitexa/locale": "*",
     "semitexa/tenancy": "*"
+  },
+  "suggest": {
+    "semitexa/scheduler": "Required for automatic scheduled sitemap regeneration (daily cron job)"
   },
   "autoload": {
     "psr-4": {

@@ -29,6 +29,10 @@ final class RobotsTxtRenderer
         if ($sitemap !== '') {
             $lines[] = '';
             $lines[] = 'Sitemap: ' . $sitemap;
+        } else {
+            $origin = AiSitemapLocator::originUrl($request, $tenantContext);
+            $lines[] = '';
+            $lines[] = 'Sitemap: ' . $origin . '/sitemap.xml';
         }
 
         $host = trim((string) (Environment::getEnvValue('ROBOTS_HOST') ?? ''));
