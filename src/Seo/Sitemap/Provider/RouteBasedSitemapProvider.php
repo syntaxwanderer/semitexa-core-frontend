@@ -43,7 +43,7 @@ final class RouteBasedSitemapProvider implements SitemapUrlProviderInterface
             static fn (mixed $route): bool => is_array($route),
         ));
         /** @var list<array<string, mixed>> $routes */
-        usort($routes, static fn (array $a, array $b): int => ($a['path'] ?? '') <=> ($b['path'] ?? ''));
+        usort($routes, fn (array $a, array $b): int => $this->stringValue($a['path'] ?? '') <=> $this->stringValue($b['path'] ?? ''));
 
         foreach ($routes as $route) {
             if (!$this->isEligible($route)) {
