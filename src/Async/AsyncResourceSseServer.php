@@ -1002,6 +1002,10 @@ final class AsyncResourceSseServer
         }
 
         foreach ($sessionIds as $rawSessionId) {
+            if (!is_scalar($rawSessionId) && !$rawSessionId instanceof \Stringable) {
+                continue;
+            }
+
             $sessionId = trim((string) $rawSessionId);
             if ($sessionId === '') {
                 continue;

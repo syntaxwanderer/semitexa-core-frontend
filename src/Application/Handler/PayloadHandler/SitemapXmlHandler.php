@@ -7,7 +7,6 @@ namespace Semitexa\Ssr\Application\Handler\PayloadHandler;
 use Semitexa\Core\Attribute\AsPayloadHandler;
 use Semitexa\Core\Attribute\InjectAsMutable;
 use Semitexa\Core\Attribute\InjectAsReadonly;
-use Semitexa\Core\Container\ContainerFactory;
 use Semitexa\Core\Contract\TypedHandlerInterface;
 use Semitexa\Core\Http\Response\ResourceResponse;
 use Semitexa\Core\Request;
@@ -17,6 +16,7 @@ use Semitexa\Ssr\Application\Payload\Request\SitemapXmlPayload;
 use Semitexa\Ssr\Seo\AiSitemapLocator;
 use Semitexa\Ssr\Seo\Sitemap\SitemapGenerationContext;
 use Semitexa\Ssr\Seo\Sitemap\SitemapGenerator;
+use Semitexa\Ssr\Seo\Sitemap\SitemapStoragePath;
 
 #[AsPayloadHandler(payload: SitemapXmlPayload::class, resource: ResourceResponse::class)]
 final class SitemapXmlHandler implements TypedHandlerInterface
@@ -103,19 +103,7 @@ final class SitemapXmlHandler implements TypedHandlerInterface
 
     private function resolveGeneratedSitemapDirectory(): string
     {
-        return ProjectRoot::get() . '/var/sitemap/' . $this->resolveTenantCacheKey();
-    }
-
-    private function resolveTenantCacheKey(): string
-    {
-        $tenantId = method_exists($this->tenantContext, 'getTenantId')
-            ? (string) $this->tenantContext->getTenantId()
-            : 'default';
-
-        $tenantId = strtolower(trim($tenantId));
-        $tenantId = preg_replace('/[^a-z0-9_-]+/', '-', $tenantId) ?? 'default';
-
-        return $tenantId !== '' ? $tenantId : 'default';
+        return SitemapStoragePath::generatedDirectory($this->tenantContext);
     }
 
     private function renderEmptySitemap(): string

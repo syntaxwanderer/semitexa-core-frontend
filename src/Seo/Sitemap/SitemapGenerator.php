@@ -147,7 +147,9 @@ final class SitemapGenerator
                     continue;
                 }
 
-                foreach ($provider->provideUrls($context) as $url) {
+                $providerUrls = $provider->provideUrls($context);
+                /** @var iterable<mixed> $providerUrls */
+                foreach ($providerUrls as $url) {
                     if ($url instanceof SitemapUrl) {
                         $urls[] = $url;
                     }

@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Semitexa\Ssr\Console\Command;
 
 use Semitexa\Core\Attribute\AsCommand;
-use Semitexa\Core\Container\ContainerFactory;
-use Semitexa\Core\Support\ProjectRoot;
+use Semitexa\Core\Attribute\InjectAsReadonly;
 use Semitexa\Ssr\Seo\AiSitemapLocator;
 use Semitexa\Ssr\Seo\Sitemap\SitemapGenerationContext;
 use Semitexa\Ssr\Seo\Sitemap\SitemapGenerator;
+use Semitexa\Ssr\Seo\Sitemap\SitemapStoragePath;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -19,6 +19,9 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(name: 'sitemap:generate', description: 'Generate sitemap.xml from all registered providers')]
 final class SitemapGenerateCommand extends Command
 {
+    #[InjectAsReadonly]
+    protected ?SitemapGenerator $generator = null;
+
     protected function configure(): void
     {
         $this->setName('sitemap:generate')
@@ -42,17 +45,22 @@ final class SitemapGenerateCommand extends Command
         $io->title('Sitemap Generation');
 
         try {
-            $container = ContainerFactory::get();
-            $generator = $container->get(SitemapGenerator::class);
+            if ($this->generator === null) {
+                throw new \RuntimeException('Sitemap generator is not available.');
+            }
 
-            $outputDir = $input->getOption('output')
-                ?? ProjectRoot::get() . '/var/sitemap';
+            $outputOption = $input->getOption('output');
+            $outputDir = is_string($outputOption) && $outputOption !== ''
+                ? $outputOption
+                : SitemapStoragePath::generatedDirectory();
 
-            $baseUrl = $input->getOption('base-url')
-                ?? AiSitemapLocator::originUrl();
+            $baseUrlOption = $input->getOption('base-url');
+            $baseUrl = is_string($baseUrlOption) && $baseUrlOption !== ''
+                ? $baseUrlOption
+                : AiSitemapLocator::originUrl();
 
             $context = new SitemapGenerationContext(baseUrl: $baseUrl);
-            $result = $generator->generateAndWrite($context, $outputDir);
+            $result = $this->generator->generateAndWrite($context, $outputDir);
 
             if (!$result->success) {
                 $io->error('Sitemap generation failed.');

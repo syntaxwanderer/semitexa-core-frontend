@@ -23,11 +23,11 @@ final class SitemapProviderRegistry
     #[InjectAsReadonly]
     protected ?ModuleRegistry $moduleRegistry = null;
 
-    /** @var list<array{class: string, priority: int}>|null */
+    /** @var list<array{class: class-string<SitemapUrlProviderInterface>, priority: int}>|null */
     private ?array $providers = null;
 
     /**
-     * @return list<array{class: string, priority: int}>
+     * @return list<array{class: class-string<SitemapUrlProviderInterface>, priority: int}>
      */
     public function getProviders(): array
     {
@@ -52,6 +52,7 @@ final class SitemapProviderRegistry
             }
 
             try {
+                /** @var class-string $className */
                 $ref = new ReflectionClass($className);
 
                 if (!$ref->implementsInterface(SitemapUrlProviderInterface::class)) {
@@ -66,6 +67,7 @@ final class SitemapProviderRegistry
                 /** @var AsSitemapProvider $attr */
                 $attr = $attrs[0]->newInstance();
 
+                /** @var class-string<SitemapUrlProviderInterface> $className */
                 $this->providers[] = [
                     'class' => $className,
                     'priority' => $attr->priority,
@@ -83,6 +85,10 @@ final class SitemapProviderRegistry
     private function isEligible(string $className): bool
     {
         if (str_starts_with($className, 'Semitexa\\')) {
+            if ($this->moduleRegistry === null) {
+                return false;
+            }
+
             return $this->moduleRegistry->isClassActive($className);
         }
 

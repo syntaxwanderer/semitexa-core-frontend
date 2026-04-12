@@ -38,15 +38,19 @@ final class RouteBasedSitemapProvider implements SitemapUrlProviderInterface
             return;
         }
 
-        $routes = $this->attributeDiscovery->getRoutes();
-        usort($routes, static fn (array $a, array $b): int => ($a['path'] ?? '') <=> ($b['path'] ?? ''));
+        $routes = array_values(array_filter(
+            $this->attributeDiscovery->getRoutes(),
+            static fn (mixed $route): bool => is_array($route),
+        ));
+        /** @var list<array<string, mixed>> $routes */
+        usort($routes, fn (array $a, array $b): int => $this->stringValue($a['path'] ?? '') <=> $this->stringValue($b['path'] ?? ''));
 
         foreach ($routes as $route) {
             if (!$this->isEligible($route)) {
                 continue;
             }
 
-            $path = (string) $route['path'];
+            $path = $this->stringValue($route['path'] ?? '');
             $url = rtrim($context->baseUrl, '/') . '/' . ltrim($path, '/');
 
             yield new SitemapUrl(
@@ -66,7 +70,7 @@ final class RouteBasedSitemapProvider implements SitemapUrlProviderInterface
             return false;
         }
 
-        $path = (string) ($route['path'] ?? '');
+        $path = $this->stringValue($route['path'] ?? '');
         if ($path === '' || str_starts_with($path, '/__semitexa')) {
             return false;
         }
@@ -98,7 +102,7 @@ final class RouteBasedSitemapProvider implements SitemapUrlProviderInterface
         }
 
         foreach ($produces as $type) {
-            if (str_contains((string) $type, 'html')) {
+            if (is_scalar($type) && str_contains((string) $type, 'html')) {
                 return true;
             }
         }
@@ -118,8 +122,17 @@ final class RouteBasedSitemapProvider implements SitemapUrlProviderInterface
         }
 
         return array_values(array_unique(array_map(
-            static fn (mixed $v): string => strtoupper(trim((string) $v)),
+            fn (mixed $v): string => strtoupper(trim($this->stringValue($v))),
             $methods,
         )));
+    }
+
+    private function stringValue(mixed $value): string
+    {
+        if (is_scalar($value) || $value instanceof \Stringable) {
+            return (string) $value;
+        }
+
+        return '';
     }
 }
