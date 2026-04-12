@@ -148,9 +148,7 @@ final class SitemapGenerator
                 }
 
                 foreach ($provider->provideUrls($context) as $url) {
-                    if ($url instanceof SitemapUrl) {
-                        $urls[] = $url;
-                    }
+                    $urls[] = $url;
                 }
             } catch (\Throwable $e) {
                 StaticLoggerBridge::warning('ssr', 'Sitemap provider failed, skipping', [

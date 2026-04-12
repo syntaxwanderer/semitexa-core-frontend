@@ -54,9 +54,13 @@ final class SitemapPartHandler implements TypedHandlerInterface
 
     private function resolveTenantCacheKey(): string
     {
-        $tenantId = method_exists($this->tenantContext, 'getTenantId')
-            ? (string) $this->tenantContext->getTenantId()
-            : 'default';
+        $tenantId = 'default';
+        if (method_exists($this->tenantContext, 'getTenantId')) {
+            $resolvedTenantId = $this->tenantContext->getTenantId();
+            if (is_scalar($resolvedTenantId) || $resolvedTenantId instanceof \Stringable) {
+                $tenantId = (string) $resolvedTenantId;
+            }
+        }
 
         $tenantId = strtolower(trim($tenantId));
         $tenantId = preg_replace('/[^a-z0-9_-]+/', '-', $tenantId) ?? 'default';

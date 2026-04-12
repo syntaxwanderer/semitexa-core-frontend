@@ -7,7 +7,6 @@ namespace Semitexa\Ssr\Application\Handler\PayloadHandler;
 use Semitexa\Core\Attribute\AsPayloadHandler;
 use Semitexa\Core\Attribute\InjectAsMutable;
 use Semitexa\Core\Attribute\InjectAsReadonly;
-use Semitexa\Core\Container\ContainerFactory;
 use Semitexa\Core\Contract\TypedHandlerInterface;
 use Semitexa\Core\Http\Response\ResourceResponse;
 use Semitexa\Core\Request;
@@ -108,9 +107,13 @@ final class SitemapXmlHandler implements TypedHandlerInterface
 
     private function resolveTenantCacheKey(): string
     {
-        $tenantId = method_exists($this->tenantContext, 'getTenantId')
-            ? (string) $this->tenantContext->getTenantId()
-            : 'default';
+        $tenantId = 'default';
+        if (method_exists($this->tenantContext, 'getTenantId')) {
+            $resolvedTenantId = $this->tenantContext->getTenantId();
+            if (is_scalar($resolvedTenantId) || $resolvedTenantId instanceof \Stringable) {
+                $tenantId = (string) $resolvedTenantId;
+            }
+        }
 
         $tenantId = strtolower(trim($tenantId));
         $tenantId = preg_replace('/[^a-z0-9_-]+/', '-', $tenantId) ?? 'default';
