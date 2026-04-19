@@ -93,6 +93,27 @@ TWIG,
         self::assertContains('print-expression', $names);
     }
 
+    public function testValidateSourceFlagsUnsupportedRawSpacingVariants(): void
+    {
+        $validator = new DeferredTemplateCompatibilityValidator();
+
+        $issues = $validator->validateSource(new Source(
+            <<<'TWIG'
+{{ title | raw }}
+{{ title| raw }}
+TWIG,
+            'inline-raw-spacing-output',
+            '/tmp/inline-raw-spacing-output.twig'
+        ));
+
+        $printExpressionIssues = array_values(array_filter(
+            $issues,
+            static fn ($issue): bool => $issue->name === 'print-expression'
+        ));
+
+        self::assertCount(2, $printExpressionIssues);
+    }
+
     public function testValidateSourceFlagsUnsupportedSetCaptureAndForElse(): void
     {
         $validator = new DeferredTemplateCompatibilityValidator();

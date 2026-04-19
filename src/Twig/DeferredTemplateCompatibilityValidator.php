@@ -54,6 +54,9 @@ final class DeferredTemplateCompatibilityValidator
     /** @var array<string, FrontendTwigCompatibilityIssue> */
     private array $issues = [];
 
+    /** @var list<array{line_start:int,line_end:int,expression:string}> */
+    private array $printExpressions = [];
+
     public function __construct(?FrontendTwigCompatibilityProfile $profile = null)
     {
         $this->profile = $profile ?? FrontendTwigCompatibilityProfile::createDefault();
@@ -106,6 +109,7 @@ final class DeferredTemplateCompatibilityValidator
     public function validateSource(Source $source): array
     {
         $this->issues = [];
+        $this->printExpressions = $this->extractPrintExpressions($source);
         $twig = ModuleTemplateRegistry::getTwig();
 
         try {
@@ -170,7 +174,7 @@ final class DeferredTemplateCompatibilityValidator
                 $filterName = $node::class;
             }
 
-            if ($filterName === 'escape' && !$this->usesExplicitFilter($source, $line, 'escape')) {
+            if ($filterName === 'escape' && $this->isImplicitAutoescapeFilter($node)) {
                 // Twig autoescape wraps ordinary `{{ value }}` output with an internal
                 // escape filter node even though the frontend renderer already escapes
                 // plain output by default.
@@ -255,12 +259,14 @@ final class DeferredTemplateCompatibilityValidator
     private function validatePrintNode(PrintNode $node, Source $source, int $line): void
     {
         $expression = $node->hasNode('expr') ? $node->getNode('expr') : null;
-        if (!$expression instanceof AbstractExpression || !$this->isSupportedPrintExpression($expression, $source, $line)) {
+        $printExpressionSource = $this->consumePrintExpressionSource($line);
+
+        if (!$expression instanceof AbstractExpression || !$this->isSupportedPrintExpression($expression, $printExpressionSource)) {
             $this->addIssue($source, $line, 'expression', 'print-expression', 'Deferred frontend Twig print expressions must be simple context paths with an optional `|raw` filter.');
         }
     }
 
-    private function isSupportedPrintExpression(AbstractExpression $expression, Source $source, int $line): bool
+    private function isSupportedPrintExpression(AbstractExpression $expression, ?string $printExpressionSource): bool
     {
         if ($expression instanceof ContextVariable || $expression instanceof GetAttrExpression) {
             return true;
@@ -272,27 +278,73 @@ final class DeferredTemplateCompatibilityValidator
                 return false;
             }
 
-            if ($filterName === 'escape' && !$this->usesExplicitFilter($source, $line, 'escape')) {
+            if ($filterName === 'escape' && $this->isImplicitAutoescapeFilter($expression)) {
                 return $expression->hasNode('node')
                     && $expression->getNode('node') instanceof AbstractExpression
-                    && $this->isSupportedPrintExpression($expression->getNode('node'), $source, $line);
+                    && $this->isSupportedPrintExpression($expression->getNode('node'), $printExpressionSource);
             }
 
             return $filterName === 'raw'
+                && is_string($printExpressionSource)
+                && str_ends_with(trim($printExpressionSource), '|raw')
                 && $expression->hasNode('node')
                 && $expression->getNode('node') instanceof AbstractExpression
-                && $this->isSupportedPrintExpression($expression->getNode('node'), $source, $line);
+                && $this->isSupportedPrintExpression($expression->getNode('node'), $printExpressionSource);
         }
 
         return false;
     }
 
-    private function usesExplicitFilter(Source $source, int $line, string $filterName): bool
+    private function isImplicitAutoescapeFilter(FilterExpression $expression): bool
     {
-        $lines = preg_split("/\r\n|\n|\r/", $source->getCode()) ?: [];
-        $lineText = $lines[$line - 1] ?? '';
+        return $expression->hasNode('arguments') && count($expression->getNode('arguments')) === 3;
+    }
 
-        return str_contains($lineText, '|' . $filterName);
+    /**
+     * @return list<array{line_start:int,line_end:int,expression:string}>
+     */
+    private function extractPrintExpressions(Source $source): array
+    {
+        $matches = [];
+        preg_match_all('/\{\{-?\s*(.*?)\s*-?\}\}/s', $source->getCode(), $matches, PREG_OFFSET_CAPTURE);
+
+        $printExpressions = [];
+
+        foreach ($matches[0] as $index => $match) {
+            if (!isset($matches[1][$index])) {
+                continue;
+            }
+
+            $fullMatch = (string) $match[0];
+            $fullOffset = (int) $match[1];
+            $expression = (string) $matches[1][$index][0];
+
+            $lineStart = substr_count(substr($source->getCode(), 0, $fullOffset), "\n") + 1;
+            $lineEnd = $lineStart + substr_count($fullMatch, "\n");
+
+            $printExpressions[] = [
+                'line_start' => $lineStart,
+                'line_end' => $lineEnd,
+                'expression' => $expression,
+            ];
+        }
+
+        return $printExpressions;
+    }
+
+    private function consumePrintExpressionSource(int $line): ?string
+    {
+        foreach ($this->printExpressions as $index => $printExpression) {
+            if ($line < $printExpression['line_start'] || $line > $printExpression['line_end']) {
+                continue;
+            }
+
+            array_splice($this->printExpressions, $index, 1);
+
+            return $printExpression['expression'];
+        }
+
+        return null;
     }
 
     private function addIssue(Source $source, int $line, string $construct, string $name, string $message): void
