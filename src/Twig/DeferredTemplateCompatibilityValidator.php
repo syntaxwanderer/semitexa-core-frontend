@@ -132,7 +132,7 @@ final class DeferredTemplateCompatibilityValidator
         return array_values($this->issues);
     }
 
-    private function validateNode(Node $node, Source $source, Environment $twig): void
+    private function validateNode(Node $node, Source $source, Environment $twig, bool $allowPrintFilters = false): void
     {
         $line = max(1, $node->getTemplateLine());
 
@@ -150,6 +150,11 @@ final class DeferredTemplateCompatibilityValidator
             // Structural nodes allowed without extra constraints.
         } elseif ($node instanceof PrintNode) {
             $this->validatePrintNode($node, $source, $line);
+            foreach ($node as $child) {
+                $this->validateNode($child, $source, $twig, true);
+            }
+
+            return;
         } elseif ($node instanceof ForNode) {
             if ($node->hasNode('else')) {
                 $this->addIssue($source, $line, 'tag', 'for-else', 'Deferred frontend Twig does not support `{% for %}...{% else %}` blocks.');
@@ -178,6 +183,8 @@ final class DeferredTemplateCompatibilityValidator
                 // Twig autoescape wraps ordinary `{{ value }}` output with an internal
                 // escape filter node even though the frontend renderer already escapes
                 // plain output by default.
+            } elseif ($allowPrintFilters && $filterName === 'raw') {
+                // Raw output is supported only for validated print-node expressions.
             } elseif (!$this->profile->supportsFilterName($filterName)) {
                 $this->addIssue($source, $line, 'filter', $filterName, sprintf('Filter `%s` is not available in deferred frontend Twig rendering.', $filterName));
             }
@@ -232,7 +239,7 @@ final class DeferredTemplateCompatibilityValidator
         }
 
         foreach ($node as $child) {
-            $this->validateNode($child, $source, $twig);
+            $this->validateNode($child, $source, $twig, $allowPrintFilters);
         }
     }
 

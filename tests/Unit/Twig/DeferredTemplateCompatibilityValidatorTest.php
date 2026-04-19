@@ -114,6 +114,25 @@ TWIG,
         self::assertCount(2, $printExpressionIssues);
     }
 
+    public function testValidateSourceFlagsRawFilterOutsidePrintNodes(): void
+    {
+        $validator = new DeferredTemplateCompatibilityValidator();
+
+        $issues = $validator->validateSource(new Source(
+            <<<'TWIG'
+{% for item in items|raw %}
+  {{ item }}
+{% endfor %}
+TWIG,
+            'inline-raw-non-print',
+            '/tmp/inline-raw-non-print.twig'
+        ));
+
+        $names = array_map(static fn ($issue): string => $issue->name, $issues);
+
+        self::assertContains('raw', $names);
+    }
+
     public function testValidateSourceFlagsUnsupportedSetCaptureAndForElse(): void
     {
         $validator = new DeferredTemplateCompatibilityValidator();
