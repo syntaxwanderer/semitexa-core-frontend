@@ -188,17 +188,24 @@ final class ComponentEventBridge
     {
         $attributes = self::buildRootAttributes($component, $componentId, $manifest);
 
-        return preg_replace_callback(
-            '/<([a-zA-Z][a-zA-Z0-9:-]*)(\s[^>]*)?>/',
-            static function (array $matches) use ($attributes): string {
-                $tag = $matches[1];
-                $existing = $matches[2] ?? '';
+        if (!preg_match('/<([a-zA-Z][a-zA-Z0-9:-]*)\b/', $html, $matches, PREG_OFFSET_CAPTURE)) {
+            return $html;
+        }
 
-                return sprintf('<%s%s %s>', $tag, $existing, $attributes);
-            },
-            $html,
-            1
-        ) ?? $html;
+        $tagStart = $matches[0][1];
+        $tagName = $matches[1][0];
+        $tagNameOffset = $matches[1][1];
+        $tagEnd = self::findOpeningTagEnd($html, $tagStart + strlen($matches[0][0]));
+        if ($tagEnd === null) {
+            return $html;
+        }
+
+        $insertionOffset = self::findAttributeInsertionOffset($html, $tagNameOffset + strlen($tagName), $tagEnd);
+
+        return substr($html, 0, $insertionOffset)
+            . ' '
+            . $attributes
+            . substr($html, $insertionOffset);
     }
 
     public static function isAllowedTrigger(string $trigger): bool
@@ -254,6 +261,51 @@ final class ComponentEventBridge
         }
 
         return implode(' ', $attributes);
+    }
+
+    private static function findOpeningTagEnd(string $html, int $offset): ?int
+    {
+        $length = strlen($html);
+        $quote = null;
+
+        for ($i = $offset; $i < $length; $i++) {
+            $char = $html[$i];
+            if ($quote !== null) {
+                if ($char === $quote) {
+                    $quote = null;
+                }
+
+                continue;
+            }
+
+            if ($char === '"' || $char === "'") {
+                $quote = $char;
+                continue;
+            }
+
+            if ($char === '>') {
+                return $i;
+            }
+        }
+
+        return null;
+    }
+
+    private static function findAttributeInsertionOffset(string $html, int $start, int $tagEnd): int
+    {
+        $i = $tagEnd - 1;
+        while ($i >= $start && preg_match('/\s/', $html[$i]) === 1) {
+            $i--;
+        }
+
+        if ($i >= $start && $html[$i] === '/') {
+            $beforeSlash = $i - 1;
+            if ($beforeSlash < $start || preg_match('/\s/', $html[$beforeSlash]) === 1) {
+                return $i;
+            }
+        }
+
+        return $tagEnd;
     }
 
     private static function resolveCurrentPagePath(): string

@@ -7,6 +7,7 @@ namespace Semitexa\Ssr\Application\Handler\PayloadHandler;
 use Semitexa\Core\Attribute\AsPayloadHandler;
 use Semitexa\Core\Attribute\InjectAsReadonly;
 use Semitexa\Core\Contract\TypedHandlerInterface;
+use Semitexa\Core\Environment;
 use Semitexa\Core\Event\EventDispatcherInterface;
 use Semitexa\Core\Exception\AccessDeniedException;
 use Semitexa\Core\Exception\NotFoundException;
@@ -109,12 +110,15 @@ final class ComponentEventDispatchHandler implements TypedHandlerInterface
         $request = $ctx[0];
         /** @var array<string, mixed> $headers */
         $headers = is_array($request->header ?? null) ? $request->header : [];
+        /** @var array<string, mixed> $server */
+        $server = is_array($request->server ?? null) ? $request->server : [];
         $host = $this->readHeader($headers, 'host');
         if ($host === '') {
             return false;
         }
 
-        $expectedOrigin = $this->parseAuthority($host, false);
+        $scheme = $this->detectRequestScheme($headers, $server);
+        $expectedOrigin = $this->parseAuthority($host, false, $scheme);
         if ($expectedOrigin === null) {
             return false;
         }
@@ -155,7 +159,7 @@ final class ComponentEventDispatchHandler implements TypedHandlerInterface
     /**
      * @return array{host: string, port: ?int, scheme: ?string}|null
      */
-    private function parseAuthority(string $value, bool $isUrl): ?array
+    private function parseAuthority(string $value, bool $isUrl, ?string $fallbackScheme = null): ?array
     {
         $input = trim($value);
         if ($input === '') {
@@ -163,7 +167,7 @@ final class ComponentEventDispatchHandler implements TypedHandlerInterface
         }
 
         if (!$isUrl) {
-            $input = 'http://' . $input;
+            $input = ($fallbackScheme ?? 'http') . '://' . $input;
         }
 
         $host = parse_url($input, PHP_URL_HOST);
@@ -179,6 +183,50 @@ final class ComponentEventDispatchHandler implements TypedHandlerInterface
             'port' => is_int($port) ? $port : null,
             'scheme' => is_string($scheme) && $scheme !== '' ? strtolower($scheme) : null,
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $headers
+     * @param array<string, mixed> $server
+     */
+    private function detectRequestScheme(array $headers, array $server): string
+    {
+        $configuredScheme = $this->normalizeSchemeValue(Environment::getEnvValue('APP_SCHEME'));
+        if ($configuredScheme !== null) {
+            return $configuredScheme;
+        }
+
+        if ($this->isHttpsEnabled($server['https'] ?? null)) {
+            return 'https';
+        }
+
+        if ($this->normalizeSchemeValue($server['request_scheme'] ?? null) === 'https') {
+            return 'https';
+        }
+
+        return 'http';
+    }
+
+    private function normalizeSchemeValue(mixed $value): ?string
+    {
+        if (!is_string($value) && !is_int($value) && !is_float($value)) {
+            return null;
+        }
+
+        $scheme = strtolower(trim((string) $value));
+
+        return $scheme !== '' ? $scheme : null;
+    }
+
+    private function isHttpsEnabled(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        $normalized = $this->normalizeSchemeValue($value);
+
+        return $normalized === 'on' || $normalized === '1' || $normalized === 'https' || $normalized === 'true';
     }
 
     /**

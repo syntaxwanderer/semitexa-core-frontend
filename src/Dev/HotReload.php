@@ -79,9 +79,11 @@ final class HotReload
         $response->header('Content-Type', 'application/json');
         $response->header('Cache-Control', 'no-cache');
 
+        $scan = self::scanForChanges();
+
         $response->end(json_encode([
-            'timestamp' => time(),
-            'files' => self::getChangedFiles(),
+            'timestamp' => $scan['timestamp'],
+            'files' => $scan['files'],
         ]));
     }
 
@@ -91,23 +93,29 @@ final class HotReload
 
         $script = <<<'JS'
         (function() {
-            let lastTimestamp = Date.now();
+            let lastTimestamp = 0;
 
             async function check() {
                 try {
                     const res = await fetch('/__semitexa_hotreload');
                     const data = await res.json();
 
+                    if (!lastTimestamp) {
+                        lastTimestamp = data.timestamp || 0;
+                        return;
+                    }
+
                     if (data.timestamp > lastTimestamp) {
                         lastTimestamp = data.timestamp;
                         if (data.files && data.files.length > 0) {
                             console.log('[Semitexa] Files changed:', data.files);
-                            window.location.reload();
                         }
+
+                        window.location.reload();
                     }
                 } catch (e) {}
             }
-            
+
             setInterval(check, 1000);
         })();
         JS;
@@ -115,9 +123,14 @@ final class HotReload
         $response->end($script);
     }
 
-    private static function getChangedFiles(): array
+    /**
+     * @return array{timestamp:int, files:list<string>}
+     */
+    private static function scanForChanges(): array
     {
+        /** @var list<string> $files */
         $files = [];
+        $maxMtime = self::$lastReload;
 
         foreach (self::$watchPaths as $watch) {
             $path = $watch['path'];
@@ -128,19 +141,35 @@ final class HotReload
             $iterator = new \RecursiveIteratorIterator(
                 new \RecursiveDirectoryIterator($path, \RecursiveDirectoryIterator::SKIP_DOTS)
             );
-            
+
             foreach ($iterator as $file) {
-                if ($file->isFile()) {
-                    $ext = $file->getExtension();
-                    if (in_array($ext, $watch['extensions'], true)) {
-                        if ($file->getMTime() > self::$lastReload) {
-                            $files[] = $file->getPathname();
-                        }
-                    }
+                if (!$file instanceof \SplFileInfo) {
+                    continue;
+                }
+
+                if (!$file->isFile()) {
+                    continue;
+                }
+                $ext = $file->getExtension();
+                if (!in_array($ext, $watch['extensions'], true)) {
+                    continue;
+                }
+
+                $mtime = (int) $file->getMTime();
+                if ($mtime > self::$lastReload) {
+                    $files[] = $file->getPathname();
+                }
+                if ($mtime > $maxMtime) {
+                    $maxMtime = $mtime;
                 }
             }
         }
-        
-        return $files;
+
+        self::$lastReload = $maxMtime;
+
+        return [
+            'timestamp' => $maxMtime * 1000,
+            'files' => $files,
+        ];
     }
 }

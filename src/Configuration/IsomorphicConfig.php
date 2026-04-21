@@ -8,16 +8,37 @@ use Semitexa\Core\Environment;
 
 readonly class IsomorphicConfig
 {
+    public bool $enabled;
+    public bool $crawlerFullRender;
+    public bool $persistentDeferredSse;
+    public bool $persistentDeferredSseRequireAuth;
+    public int $sseHeartbeatIntervalSeconds;
+    public int $defaultCacheTtl;
+    public string $templateAssetsPath;
+    public int $deferredContextSize;
+
+    /**
+     * @param string $templateAssetsPath Project-relative public asset directory, e.g. public/assets/ssr/tpl
+     */
     public function __construct(
-        public bool $enabled = false,
-        public bool $crawlerFullRender = true,
-        public bool $persistentDeferredSse = false,
-        public bool $persistentDeferredSseRequireAuth = true,
-        public int $sseHeartbeatIntervalSeconds = 15,
-        public int $defaultCacheTtl = 0,
-        public string $templateAssetsPath = 'public/assets/ssr/tpl',
-        public int $deferredContextSize = 32768,
-    ) {}
+        bool $enabled = false,
+        bool $crawlerFullRender = true,
+        bool $persistentDeferredSse = false,
+        bool $persistentDeferredSseRequireAuth = true,
+        int $sseHeartbeatIntervalSeconds = 15,
+        int $defaultCacheTtl = 0,
+        string $templateAssetsPath = 'public/assets/ssr/tpl',
+        int $deferredContextSize = 32768,
+    ) {
+        $this->enabled = $enabled;
+        $this->crawlerFullRender = $crawlerFullRender;
+        $this->persistentDeferredSse = $persistentDeferredSse;
+        $this->persistentDeferredSseRequireAuth = $persistentDeferredSseRequireAuth;
+        $this->sseHeartbeatIntervalSeconds = $sseHeartbeatIntervalSeconds;
+        $this->defaultCacheTtl = $defaultCacheTtl;
+        $this->templateAssetsPath = self::normalizeTemplateAssetsPath($templateAssetsPath);
+        $this->deferredContextSize = $deferredContextSize;
+    }
 
     public static function fromEnvironment(): self
     {
@@ -31,5 +52,22 @@ readonly class IsomorphicConfig
             templateAssetsPath: Environment::getEnvValue('SSR_TEMPLATE_ASSETS_PATH', 'public/assets/ssr/tpl'),
             deferredContextSize: (int) Environment::getEnvValue('SSR_DEFERRED_CONTEXT_SIZE', '32768'),
         );
+    }
+
+    private static function normalizeTemplateAssetsPath(string $path): string
+    {
+        $normalized = trim(str_replace('\\', '/', $path), '/');
+        if ($normalized === '') {
+            throw new \InvalidArgumentException('SSR_TEMPLATE_ASSETS_PATH must not be empty.');
+        }
+
+        if ($normalized !== 'public' && !str_starts_with($normalized, 'public/')) {
+            throw new \InvalidArgumentException(sprintf(
+                'SSR_TEMPLATE_ASSETS_PATH must point inside the public/ tree; got "%s".',
+                $path,
+            ));
+        }
+
+        return $normalized;
     }
 }
