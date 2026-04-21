@@ -189,12 +189,15 @@ final class ComponentEventBridge
         $attributes = self::buildRootAttributes($component, $componentId, $manifest);
 
         return preg_replace_callback(
-            '/<([a-zA-Z][a-zA-Z0-9:-]*)(\s[^>]*)?>/',
+            '/<([a-zA-Z][a-zA-Z0-9:-]*)((?:\s[^>]*?)?)(\s*\/)?>/',
             static function (array $matches) use ($attributes): string {
                 $tag = $matches[1];
-                $existing = $matches[2] ?? '';
+                $existing = rtrim($matches[2] ?? '', " \t\n\r\0\x0B/");
+                $selfClosing = ($matches[3] ?? '') !== '';
+                $suffix = $selfClosing ? ' />' : '>';
+                $attrPrefix = $existing === '' ? ' ' : $existing . ' ';
 
-                return sprintf('<%s%s %s>', $tag, $existing, $attributes);
+                return '<' . $tag . $attrPrefix . $attributes . $suffix;
             },
             $html,
             1

@@ -79,9 +79,11 @@ final class HotReload
         $response->header('Content-Type', 'application/json');
         $response->header('Cache-Control', 'no-cache');
 
+        $scan = self::scanForChanges();
+
         $response->end(json_encode([
-            'timestamp' => time(),
-            'files' => self::getChangedFiles(),
+            'timestamp' => $scan['timestamp'],
+            'files' => $scan['files'],
         ]));
     }
 
@@ -107,7 +109,7 @@ final class HotReload
                     }
                 } catch (e) {}
             }
-            
+
             setInterval(check, 1000);
         })();
         JS;
@@ -115,9 +117,13 @@ final class HotReload
         $response->end($script);
     }
 
-    private static function getChangedFiles(): array
+    /**
+     * @return array{timestamp:int, files:list<string>}
+     */
+    private static function scanForChanges(): array
     {
         $files = [];
+        $maxMtime = self::$lastReload;
 
         foreach (self::$watchPaths as $watch) {
             $path = $watch['path'];
@@ -128,19 +134,31 @@ final class HotReload
             $iterator = new \RecursiveIteratorIterator(
                 new \RecursiveDirectoryIterator($path, \RecursiveDirectoryIterator::SKIP_DOTS)
             );
-            
+
             foreach ($iterator as $file) {
-                if ($file->isFile()) {
-                    $ext = $file->getExtension();
-                    if (in_array($ext, $watch['extensions'], true)) {
-                        if ($file->getMTime() > self::$lastReload) {
-                            $files[] = $file->getPathname();
-                        }
-                    }
+                if (!$file->isFile()) {
+                    continue;
+                }
+                $ext = $file->getExtension();
+                if (!in_array($ext, $watch['extensions'], true)) {
+                    continue;
+                }
+
+                $mtime = $file->getMTime();
+                if ($mtime > self::$lastReload) {
+                    $files[] = $file->getPathname();
+                }
+                if ($mtime > $maxMtime) {
+                    $maxMtime = $mtime;
                 }
             }
         }
-        
-        return $files;
+
+        self::$lastReload = $maxMtime;
+
+        return [
+            'timestamp' => $maxMtime * 1000,
+            'files' => $files,
+        ];
     }
 }

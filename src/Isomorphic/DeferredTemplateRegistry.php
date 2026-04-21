@@ -90,8 +90,9 @@ final class DeferredTemplateRegistry
                 continue;
             }
 
-            $publicBase = preg_replace('#^public/?#', '', ltrim($basePath, '/')) ?? $basePath;
-            $urlBase = '/' . ltrim($publicBase, '/');
+            $publicBase = preg_replace('#^public(?:/|$)#', '', ltrim($basePath, '/')) ?? $basePath;
+            $publicBase = trim($publicBase, '/');
+            $urlBase = $publicBase === '' ? '' : '/' . $publicBase;
             if ($tenantId !== null && $tenantId !== '') {
                 $urlBase .= '/' . $tenantId;
             }
@@ -243,8 +244,9 @@ final class DeferredTemplateRegistry
             return null;
         }
 
-        $publicBase = preg_replace('#^public/?#', '', ltrim($basePath, '/')) ?? $basePath;
-        $urlBase = '/' . ltrim($publicBase, '/');
+        $publicBase = preg_replace('#^public(?:/|$)#', '', ltrim($basePath, '/')) ?? $basePath;
+        $publicBase = trim($publicBase, '/');
+        $urlBase = $publicBase === '' ? '' : '/' . $publicBase;
         if ($tenantId !== null && $tenantId !== '') {
             $urlBase .= '/' . $tenantId;
         }

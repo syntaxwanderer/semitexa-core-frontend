@@ -109,12 +109,15 @@ final class ComponentEventDispatchHandler implements TypedHandlerInterface
         $request = $ctx[0];
         /** @var array<string, mixed> $headers */
         $headers = is_array($request->header ?? null) ? $request->header : [];
+        /** @var array<string, mixed> $server */
+        $server = is_array($request->server ?? null) ? $request->server : [];
         $host = $this->readHeader($headers, 'host');
         if ($host === '') {
             return false;
         }
 
-        $expectedOrigin = $this->parseAuthority($host, false);
+        $scheme = $this->detectRequestScheme($headers, $server);
+        $expectedOrigin = $this->parseAuthority($host, false, $scheme);
         if ($expectedOrigin === null) {
             return false;
         }
@@ -155,7 +158,7 @@ final class ComponentEventDispatchHandler implements TypedHandlerInterface
     /**
      * @return array{host: string, port: ?int, scheme: ?string}|null
      */
-    private function parseAuthority(string $value, bool $isUrl): ?array
+    private function parseAuthority(string $value, bool $isUrl, ?string $fallbackScheme = null): ?array
     {
         $input = trim($value);
         if ($input === '') {
@@ -163,7 +166,7 @@ final class ComponentEventDispatchHandler implements TypedHandlerInterface
         }
 
         if (!$isUrl) {
-            $input = 'http://' . $input;
+            $input = ($fallbackScheme ?? 'http') . '://' . $input;
         }
 
         $host = parse_url($input, PHP_URL_HOST);
@@ -179,6 +182,28 @@ final class ComponentEventDispatchHandler implements TypedHandlerInterface
             'port' => is_int($port) ? $port : null,
             'scheme' => is_string($scheme) && $scheme !== '' ? strtolower($scheme) : null,
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $headers
+     * @param array<string, mixed> $server
+     */
+    private function detectRequestScheme(array $headers, array $server): string
+    {
+        $forwarded = $this->readHeader($headers, 'x-forwarded-proto');
+        if ($forwarded !== '') {
+            $first = trim(explode(',', $forwarded)[0]);
+            if ($first !== '') {
+                return strtolower($first);
+            }
+        }
+
+        $https = $server['https'] ?? null;
+        if (is_string($https) && $https !== '' && strtolower($https) !== 'off') {
+            return 'https';
+        }
+
+        return 'http';
     }
 
     /**
