@@ -115,13 +115,14 @@ final class AsyncResourceSseServer
         $authenticated = self::hasAuthenticatedSession($request);
         $anonymousAllowed = filter_var((string) (\getenv('SSE_PUBLIC_ANONYMOUS') ?: ''), FILTER_VALIDATE_BOOLEAN);
 
-        if ($demoStream !== '' && !$authenticated) {
-            self::rejectUnauthorized($response, 'Authorization is required for this SSE demo stream.');
-            return;
-        }
-
-        if ($demoStream === '' && $deferredRequestId === '' && !$authenticated && !$anonymousAllowed) {
-            self::rejectUnauthorized($response, 'Authorization is required for persistent SSE streams. Set SSE_PUBLIC_ANONYMOUS=true to opt in to anonymous persistent streams.');
+        $authError = self::resolveSseAuthorizationError(
+            authenticated: $authenticated,
+            anonymousAllowed: $anonymousAllowed,
+            demoStream: $demoStream,
+            deferredRequestId: $deferredRequestId,
+        );
+        if ($authError !== null) {
+            self::rejectUnauthorized($response, $authError);
             return;
         }
 
@@ -898,6 +899,23 @@ final class AsyncResourceSseServer
             'error' => 'Unauthorized',
             'message' => $message,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    }
+
+    private static function resolveSseAuthorizationError(
+        bool $authenticated,
+        bool $anonymousAllowed,
+        string $demoStream,
+        string $deferredRequestId,
+    ): ?string {
+        if ($demoStream !== '' && !$authenticated) {
+            return 'Authorization is required for this SSE demo stream.';
+        }
+
+        if ($demoStream === '' && $deferredRequestId === '' && !$authenticated && !$anonymousAllowed) {
+            return 'Authorization is required for persistent SSE streams. Set SSE_PUBLIC_ANONYMOUS=true to opt in to anonymous persistent streams.';
+        }
+
+        return null;
     }
 
     private static function rejectTooManyRequests(Response $response, string $message): void
