@@ -89,14 +89,7 @@ final class AsyncResourceSseServer
 
     private static function handleSse(Request $request, Response $response): void
     {
-        if (!self::isSameOriginRequest($request)) {
-            $response->status(403);
-            $response->end();
-            return;
-        }
-
         $get = is_array($request->get) ? $request->get : [];
-        $header = is_array($request->header) ? $request->header : [];
         $sessionId = trim((string) (($get['session_id'] ?? null) ?: uniqid('sse_', true)));
         $demoStream = '';
         if (isset($get['demo_stream'])) {
@@ -121,8 +114,18 @@ final class AsyncResourceSseServer
             demoStream: $demoStream,
             deferredRequestId: $deferredRequestId,
         );
-        if ($authError !== null) {
-            self::rejectUnauthorized($response, $authError);
+        $rejection = self::resolveSseRequestRejection(
+            sameOrigin: self::isSameOriginRequest($request),
+            authError: $authError,
+        );
+        if ($rejection !== null) {
+            if ($rejection['status'] === 401) {
+                self::rejectUnauthorized($response, $rejection['message']);
+                return;
+            }
+
+            $response->status($rejection['status']);
+            $response->end();
             return;
         }
 
@@ -218,6 +221,7 @@ final class AsyncResourceSseServer
         }
 
         // Trigger deferred block streaming if deferred_request_id is present
+        $header = is_array($request->header) ? $request->header : [];
         $lastEventId = $header['last-event-id'] ?? null;
         if ($deferredRequestId !== '') {
             $bindToken = self::getSsrBindToken($request);
@@ -913,6 +917,28 @@ final class AsyncResourceSseServer
 
         if ($demoStream === '' && $deferredRequestId === '' && !$authenticated && !$anonymousAllowed) {
             return 'Authorization is required for persistent SSE streams. Set SSE_PUBLIC_ANONYMOUS=true to opt in to anonymous persistent streams.';
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{status: int, message: string}|null
+     */
+    private static function resolveSseRequestRejection(bool $sameOrigin, ?string $authError): ?array
+    {
+        if ($authError !== null) {
+            return [
+                'status' => 401,
+                'message' => $authError,
+            ];
+        }
+
+        if (!$sameOrigin) {
+            return [
+                'status' => 403,
+                'message' => '',
+            ];
         }
 
         return null;

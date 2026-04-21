@@ -51,6 +51,36 @@ final class AsyncResourceSseServerTest extends TestCase
     }
 
     #[Test]
+    public function guest_persistent_stream_is_rejected_as_unauthorized_before_same_origin_guard(): void
+    {
+        self::assertSame(
+            [
+                'status' => 401,
+                'message' => 'Authorization is required for persistent SSE streams. Set SSE_PUBLIC_ANONYMOUS=true to opt in to anonymous persistent streams.',
+            ],
+            $this->resolveSseRequestRejection(
+                sameOrigin: false,
+                authError: 'Authorization is required for persistent SSE streams. Set SSE_PUBLIC_ANONYMOUS=true to opt in to anonymous persistent streams.',
+            ),
+        );
+    }
+
+    #[Test]
+    public function authenticated_stream_still_requires_same_origin_headers(): void
+    {
+        self::assertSame(
+            [
+                'status' => 403,
+                'message' => '',
+            ],
+            $this->resolveSseRequestRejection(
+                sameOrigin: false,
+                authError: null,
+            ),
+        );
+    }
+
+    #[Test]
     public function session_coroutine_cancellation_clears_registry_and_stops_worker(): void
     {
         if (!extension_loaded('swoole') || !function_exists('Co\\run') || !class_exists(Channel::class)) {
@@ -115,5 +145,22 @@ final class AsyncResourceSseServerTest extends TestCase
         );
 
         return is_string($result) ? $result : null;
+    }
+
+    /**
+     * @return array{status: int, message: string}|null
+     */
+    private function resolveSseRequestRejection(bool $sameOrigin, ?string $authError): ?array
+    {
+        $method = new \ReflectionMethod(AsyncResourceSseServer::class, 'resolveSseRequestRejection');
+        $method->setAccessible(true);
+
+        $result = $method->invoke(
+            null,
+            $sameOrigin,
+            $authError,
+        );
+
+        return is_array($result) ? $result : null;
     }
 }
