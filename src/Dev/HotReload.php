@@ -93,12 +93,17 @@ final class HotReload
 
         $script = <<<'JS'
         (function() {
-            let lastTimestamp = Date.now();
+            let lastTimestamp = 0;
 
             async function check() {
                 try {
                     const res = await fetch('/__semitexa_hotreload');
                     const data = await res.json();
+
+                    if (!lastTimestamp) {
+                        lastTimestamp = data.timestamp || 0;
+                        return;
+                    }
 
                     if (data.timestamp > lastTimestamp) {
                         lastTimestamp = data.timestamp;

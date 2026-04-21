@@ -191,34 +191,42 @@ final class ComponentEventDispatchHandler implements TypedHandlerInterface
      */
     private function detectRequestScheme(array $headers, array $server): string
     {
-        $configuredScheme = strtolower(trim((string) (Environment::getEnvValue('APP_SCHEME') ?? '')));
-        if ($configuredScheme !== '') {
+        $configuredScheme = $this->normalizeSchemeValue(Environment::getEnvValue('APP_SCHEME'));
+        if ($configuredScheme !== null) {
             return $configuredScheme;
         }
 
-        $https = $server['https'] ?? null;
-        if (is_bool($https)) {
-            return $https ? 'https' : 'http';
-        }
-
-        if (
-            (is_string($https) || is_int($https) || is_float($https))
-            && ($httpsValue = strtolower(trim((string) $https))) !== ''
-            && $httpsValue !== 'off'
-            && $httpsValue !== '0'
-        ) {
+        if ($this->isHttpsEnabled($server['https'] ?? null)) {
             return 'https';
         }
 
-        $requestScheme = $server['request_scheme'] ?? null;
-        if (
-            (is_string($requestScheme) || is_int($requestScheme) || is_float($requestScheme))
-            && strtolower(trim((string) $requestScheme)) === 'https'
-        ) {
+        if ($this->normalizeSchemeValue($server['request_scheme'] ?? null) === 'https') {
             return 'https';
         }
 
         return 'http';
+    }
+
+    private function normalizeSchemeValue(mixed $value): ?string
+    {
+        if (!is_string($value) && !is_int($value) && !is_float($value)) {
+            return null;
+        }
+
+        $scheme = strtolower(trim((string) $value));
+
+        return $scheme !== '' ? $scheme : null;
+    }
+
+    private function isHttpsEnabled(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        $normalized = $this->normalizeSchemeValue($value);
+
+        return $normalized === 'on' || $normalized === '1' || $normalized === 'https' || $normalized === 'true';
     }
 
     /**
