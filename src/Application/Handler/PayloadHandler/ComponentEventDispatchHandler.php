@@ -7,6 +7,7 @@ namespace Semitexa\Ssr\Application\Handler\PayloadHandler;
 use Semitexa\Core\Attribute\AsPayloadHandler;
 use Semitexa\Core\Attribute\InjectAsReadonly;
 use Semitexa\Core\Contract\TypedHandlerInterface;
+use Semitexa\Core\Environment;
 use Semitexa\Core\Event\EventDispatcherInterface;
 use Semitexa\Core\Exception\AccessDeniedException;
 use Semitexa\Core\Exception\NotFoundException;
@@ -190,16 +191,30 @@ final class ComponentEventDispatchHandler implements TypedHandlerInterface
      */
     private function detectRequestScheme(array $headers, array $server): string
     {
-        $forwarded = $this->readHeader($headers, 'x-forwarded-proto');
-        if ($forwarded !== '') {
-            $first = trim(explode(',', $forwarded)[0]);
-            if ($first !== '') {
-                return strtolower($first);
-            }
+        $configuredScheme = strtolower(trim((string) (Environment::getEnvValue('APP_SCHEME') ?? '')));
+        if ($configuredScheme !== '') {
+            return $configuredScheme;
         }
 
         $https = $server['https'] ?? null;
-        if (is_string($https) && $https !== '' && strtolower($https) !== 'off') {
+        if (is_bool($https)) {
+            return $https ? 'https' : 'http';
+        }
+
+        if (
+            (is_string($https) || is_int($https) || is_float($https))
+            && ($httpsValue = strtolower(trim((string) $https))) !== ''
+            && $httpsValue !== 'off'
+            && $httpsValue !== '0'
+        ) {
+            return 'https';
+        }
+
+        $requestScheme = $server['request_scheme'] ?? null;
+        if (
+            (is_string($requestScheme) || is_int($requestScheme) || is_float($requestScheme))
+            && strtolower(trim((string) $requestScheme)) === 'https'
+        ) {
             return 'https';
         }
 

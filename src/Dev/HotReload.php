@@ -122,6 +122,7 @@ final class HotReload
      */
     private static function scanForChanges(): array
     {
+        /** @var list<string> $files */
         $files = [];
         $maxMtime = self::$lastReload;
 
@@ -136,6 +137,10 @@ final class HotReload
             );
 
             foreach ($iterator as $file) {
+                if (!$file instanceof \SplFileInfo) {
+                    continue;
+                }
+
                 if (!$file->isFile()) {
                     continue;
                 }
@@ -144,7 +149,7 @@ final class HotReload
                     continue;
                 }
 
-                $mtime = $file->getMTime();
+                $mtime = (int) $file->getMTime();
                 if ($mtime > self::$lastReload) {
                     $files[] = $file->getPathname();
                 }

@@ -35,6 +35,7 @@ final class DeferredTemplateRegistry
         $deferredSlots = LayoutSlotRegistry::getAllDeferredSlots();
         $projectRoot = ProjectRoot::get();
         $basePath = rtrim($config->templateAssetsPath, '/');
+        $publicBase = self::publicBasePath($basePath);
         $assetBasePath = rtrim(dirname($basePath), '/');
 
         $outputDir = $projectRoot . '/' . $basePath;
@@ -90,8 +91,6 @@ final class DeferredTemplateRegistry
                 continue;
             }
 
-            $publicBase = preg_replace('#^public(?:/|$)#', '', ltrim($basePath, '/')) ?? $basePath;
-            $publicBase = trim($publicBase, '/');
             $urlBase = $publicBase === '' ? '' : '/' . $publicBase;
             if ($tenantId !== null && $tenantId !== '') {
                 $urlBase .= '/' . $tenantId;
@@ -194,6 +193,7 @@ final class DeferredTemplateRegistry
     ): ?string {
         $projectRoot = ProjectRoot::get();
         $basePath = rtrim($config->templateAssetsPath, '/');
+        $publicBase = self::publicBasePath($basePath);
         $assetBasePath = rtrim(dirname($basePath), '/');
 
         $outputDir = $projectRoot . '/' . $basePath;
@@ -244,8 +244,6 @@ final class DeferredTemplateRegistry
             return null;
         }
 
-        $publicBase = preg_replace('#^public(?:/|$)#', '', ltrim($basePath, '/')) ?? $basePath;
-        $publicBase = trim($publicBase, '/');
         $urlBase = $publicBase === '' ? '' : '/' . $publicBase;
         if ($tenantId !== null && $tenantId !== '') {
             $urlBase .= '/' . $tenantId;
@@ -255,5 +253,21 @@ final class DeferredTemplateRegistry
         self::$publishedPaths[self::keyFor($slot->slotId, $slot->pageHandle)] = $path;
 
         return $path;
+    }
+
+    private static function publicBasePath(string $basePath): string
+    {
+        if ($basePath === 'public') {
+            return '';
+        }
+
+        if (!str_starts_with($basePath, 'public/')) {
+            throw new \InvalidArgumentException(sprintf(
+                'Deferred template assets path must point inside public/; got "%s".',
+                $basePath,
+            ));
+        }
+
+        return trim(substr($basePath, strlen('public/')), '/');
     }
 }
