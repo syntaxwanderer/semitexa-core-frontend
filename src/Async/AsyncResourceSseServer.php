@@ -28,6 +28,17 @@ final class AsyncResourceSseServer
     private const REDIS_SESSION_QUEUE_PREFIX = 'semitexa_sse_queue:';
     private const REDIS_SESSION_QUEUE_TTL_SECONDS = 7200;
 
+    // Connection hardening defaults (all env-overridable).
+    private const DEFAULT_MAX_CONN_PER_IP = 5;
+    private const DEFAULT_MAX_CONN_GLOBAL = 500;
+    private const DEFAULT_MAX_CONNECTION_AGE_SECONDS = 600;
+
+    /** @var array<string, int> Per-worker IP → open-connection counter. */
+    private static array $ipConnections = [];
+
+    /** @var array<string, string> Connection key → client IP (for decrement on close). */
+    private static array $sessionIps = [];
+
     private static array $sessions = [];
 
     /** @var array<string, list<array>> Pending messages per session when no connection yet */
@@ -92,16 +103,44 @@ final class AsyncResourceSseServer
             $demoStream = trim((string) $get['demo_stream']);
         }
 
-        if ($demoStream !== '') {
-            if (!self::hasAuthenticatedSession($request)) {
-                $response->status(401);
-                $response->header('Content-Type', 'application/json');
-                $response->end(json_encode([
-                    'error' => 'Unauthorized',
-                    'message' => 'Authorization is required for this SSE demo stream.',
-                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-                return;
-            }
+        // Auth gate — ordering matters:
+        //  1. demo_stream always requires a session (the demo attribution relies on it).
+        //  2. otherwise, unless SSE_PUBLIC_ANONYMOUS is explicitly enabled, require auth.
+        //
+        // This closes finding S-1: previously the base /sse stream was open to
+        // any client with no auth, no caps, no timeout.
+        $authenticated = self::hasAuthenticatedSession($request);
+        $anonymousAllowed = filter_var((string) (\getenv('SSE_PUBLIC_ANONYMOUS') ?: ''), FILTER_VALIDATE_BOOLEAN);
+
+        if ($demoStream !== '' && !$authenticated) {
+            self::rejectUnauthorized($response, 'Authorization is required for this SSE demo stream.');
+            return;
+        }
+
+        if ($demoStream === '' && !$authenticated && !$anonymousAllowed) {
+            self::rejectUnauthorized($response, 'Authorization is required for the SSE stream. Set SSE_PUBLIC_ANONYMOUS=true to opt in to anonymous streams.');
+            return;
+        }
+
+        // Per-IP + global connection caps. Apply to every connection (authenticated
+        // or anonymous) to bound worker/FD consumption.
+        $clientIp = self::resolveClientIp($request);
+        $maxPerIp = self::envInt('SSE_MAX_CONN_PER_IP', self::DEFAULT_MAX_CONN_PER_IP);
+        $maxGlobal = self::envInt('SSE_MAX_CONN_GLOBAL', self::DEFAULT_MAX_CONN_GLOBAL);
+
+        $globalOpen = array_sum(self::$ipConnections);
+        if ($globalOpen >= $maxGlobal) {
+            self::rejectTooManyRequests($response, 'SSE connection cap reached for this worker.');
+            return;
+        }
+        if ($clientIp !== '' && ((self::$ipConnections[$clientIp] ?? 0) >= $maxPerIp)) {
+            self::rejectTooManyRequests($response, 'SSE connection cap reached for your IP.');
+            return;
+        }
+
+        if ($clientIp !== '') {
+            self::$ipConnections[$clientIp] = (self::$ipConnections[$clientIp] ?? 0) + 1;
+            self::$sessionIps[self::sessionConnectionKey($sessionId, $response)] = $clientIp;
         }
 
         $response->status(200);
@@ -199,7 +238,15 @@ final class AsyncResourceSseServer
 
         $closed = false;
         $lastAuthTouchAt = time();
+        $connectionStartedAt = time();
+        $maxAgeSeconds = self::envInt('SSE_MAX_CONNECTION_AGE_SECONDS', self::DEFAULT_MAX_CONNECTION_AGE_SECONDS);
         while (!$closed && isset(self::$sessions[$sessionId])) {
+            // Hard connection-age cap — bounds hanging-connection attacks.
+            if ($maxAgeSeconds > 0 && (time() - $connectionStartedAt) >= $maxAgeSeconds) {
+                self::writeSse($response, ['event' => 'close', 'reason' => 'max_age', 'close' => true]);
+                break;
+            }
+
             if ((time() - $lastAuthTouchAt) >= self::AUTH_SESSION_TOUCH_INTERVAL_SECONDS) {
                 $authenticatedUserId = self::refreshAuthenticatedSessionMapping($request, $sessionId, $authenticatedUserId);
                 self::touchActiveSession($sessionId);
@@ -795,8 +842,71 @@ final class AsyncResourceSseServer
         self::cancelSessionCoroutines($sessionId);
         self::removeSessionWorkerMapping($sessionId);
         self::unregisterAuthenticatedSession($sessionId);
+        self::releaseIpConnection($sessionId, $response);
         unset(self::$sessions[$sessionId], self::$queues[$sessionId], self::$demoProducers[$sessionId], self::$sessionCoroutines[$sessionId]);
         @$response->end();
+    }
+
+    private static function releaseIpConnection(string $sessionId, Response $response): void
+    {
+        $connectionKey = self::sessionConnectionKey($sessionId, $response);
+        $ip = self::$sessionIps[$connectionKey] ?? '';
+        if ($ip === '') {
+            return;
+        }
+
+        if (isset(self::$ipConnections[$ip])) {
+            self::$ipConnections[$ip]--;
+            if (self::$ipConnections[$ip] <= 0) {
+                unset(self::$ipConnections[$ip]);
+            }
+        }
+        unset(self::$sessionIps[$connectionKey]);
+    }
+
+    private static function resolveClientIp(Request $request): string
+    {
+        $server = is_array($request->server) ? $request->server : [];
+        $ip = trim((string) ($server['remote_addr'] ?? ''));
+
+        return $ip !== '' ? strtolower($ip) : '';
+    }
+
+    private static function envInt(string $key, int $default): int
+    {
+        $rawValue = \getenv($key);
+        $raw = trim($rawValue === false ? '' : (string) $rawValue);
+        if ($raw === '') {
+            return $default;
+        }
+        $parsed = filter_var($raw, FILTER_VALIDATE_INT);
+        return is_int($parsed) && $parsed >= 0 ? $parsed : $default;
+    }
+
+    private static function sessionConnectionKey(string $sessionId, Response $response): string
+    {
+        return $sessionId . '#' . spl_object_id($response);
+    }
+
+    private static function rejectUnauthorized(Response $response, string $message): void
+    {
+        $response->status(401);
+        $response->header('Content-Type', 'application/json');
+        $response->end(json_encode([
+            'error' => 'Unauthorized',
+            'message' => $message,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    }
+
+    private static function rejectTooManyRequests(Response $response, string $message): void
+    {
+        $response->status(429);
+        $response->header('Content-Type', 'application/json');
+        $response->header('Retry-After', '30');
+        $response->end(json_encode([
+            'error' => 'Too Many Requests',
+            'message' => $message,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     }
 
     private static function cancelSessionCoroutines(string $sessionId): void
@@ -1011,7 +1121,8 @@ final class AsyncResourceSseServer
     {
         $cookieName = Environment::getEnvValue('SESSION_COOKIE_NAME') ?? 'semitexa_session';
         $cookie = is_array($request->cookie) ? $request->cookie : [];
-        $sessionId = trim((string) ($cookie[$cookieName] ?? ''));
+        $sessionValue = $cookie[$cookieName] ?? null;
+        $sessionId = is_string($sessionValue) ? trim($sessionValue) : '';
         if ($sessionId === '' || !preg_match('/^[a-f0-9]{32}$/', $sessionId)) {
             return '';
         }
@@ -1181,16 +1292,21 @@ final class AsyncResourceSseServer
         if (is_array($request->header)) {
             foreach ($request->header as $key => $value) {
                 if (is_string($key) && (is_scalar($value) || $value === null)) {
-                    $header[$key] = (string) $value;
+                    $header[strtolower($key)] = (string) $value;
                 }
             }
         }
 
+        // Fail closed: Host is required to compare against.
         $host = trim($header['host'] ?? '');
         if ($host === '') {
-            return true;
+            return false;
         }
 
+        // Fail closed: at least one of Origin/Referer must be present AND match.
+        // Browser-originated EventSource always sends Origin; any request without
+        // either header is treated as cross-origin/untrusted.
+        $matched = false;
         foreach (['origin', 'referer'] as $headerName) {
             $value = trim($header[$headerName] ?? '');
             if ($value === '') {
@@ -1199,7 +1315,7 @@ final class AsyncResourceSseServer
 
             $requestHost = parse_url($value, PHP_URL_HOST);
             if (!is_string($requestHost) || $requestHost === '') {
-                continue;
+                return false;
             }
 
             $requestPort = parse_url($value, PHP_URL_PORT);
@@ -1209,8 +1325,10 @@ final class AsyncResourceSseServer
             if ($normalizedRequestHost !== $normalizedHost && strtolower($requestHost) !== $normalizedHost) {
                 return false;
             }
+
+            $matched = true;
         }
 
-        return true;
+        return $matched;
     }
 }
