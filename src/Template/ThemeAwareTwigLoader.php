@@ -19,9 +19,9 @@ use Twig\Source;
  *
  * Any namespace other than `project-layouts-*` delegates straight through.
  *
- * When the chain resolver returns an empty array (no provider bound, or
- * provider returned empty), behavior matches the legacy wrapped loader
- * exactly — env-THEME-based overrides already registered at boot time
+ * When the chain resolver returns a non-list or an empty array (no provider
+ * bound, or provider returned empty), behavior matches the legacy wrapped
+ * loader exactly — env-THEME-based overrides already registered at boot time
  * are the source of truth.
  */
 final class ThemeAwareTwigLoader implements LoaderInterface
@@ -95,6 +95,7 @@ final class ThemeAwareTwigLoader implements LoaderInterface
         $relative = $m[2];
 
         $chain = ($this->chainResolver)();
+        $chain = is_array($chain) ? array_values(array_filter($chain, 'is_string')) : [];
         if ($chain === []) {
             return null;
         }

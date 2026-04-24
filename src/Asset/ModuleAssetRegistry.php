@@ -171,6 +171,7 @@ class ModuleAssetRegistry
         // legacy $themeMap + base dirs when no chain override matches.
         if (self::$chainResolver !== null) {
             $chain = (self::$chainResolver)();
+            $chain = is_array($chain) ? array_values(array_filter($chain, 'is_string')) : [];
             if ($chain !== []) {
                 $projectRoot = ProjectRoot::get();
                 foreach ($chain as $themeId) {
