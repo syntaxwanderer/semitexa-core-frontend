@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Semitexa\Ssr\Template;
 
+use Semitexa\Core\Environment;
 use Semitexa\Core\ModuleRegistry;
 use Semitexa\Core\Support\ProjectRoot;
 use Twig\Environment as TwigEnvironment;
 use Twig\Loader\FilesystemLoader;
+use Twig\Loader\LoaderInterface;
 use Twig\TwigFunction;
 
 /**
@@ -37,7 +39,7 @@ use Twig\TwigFunction;
 final class ModuleTemplateRegistry
 {
     private static ?TwigEnvironment $twig = null;
-    private static ?FilesystemLoader $loader = null;
+    private static ?LoaderInterface $loader = null;
 
     private static array $modulePaths = [];
     private static bool $initialized = false;
@@ -70,8 +72,7 @@ final class ModuleTemplateRegistry
         if (self::$chainResolver === null) {
             return [];
         }
-        $chain = (self::$chainResolver)();
-        return is_array($chain) ? array_values(array_filter($chain, 'is_string')) : [];
+        return self::normalizeChain((self::$chainResolver)());
     }
 
     public static function setModuleRegistry(ModuleRegistry $moduleRegistry): void
@@ -97,9 +98,13 @@ final class ModuleTemplateRegistry
         return self::$twig;
     }
 
-    public static function getLoader(): FilesystemLoader
+    public static function getLoader(): LoaderInterface
     {
         self::initialize();
+        if (!(self::$loader instanceof LoaderInterface)) {
+            throw new \LogicException('ModuleTemplateRegistry loader was not initialized.');
+        }
+
         return self::$loader;
     }
 
@@ -193,14 +198,17 @@ final class ModuleTemplateRegistry
             }
         }
 
-        self::$loader = $loader;
-
-        // Per-request theme chain walking: if a resolver is bound, wrap the
-        // FilesystemLoader so each `@project-layouts-<module>/...` lookup
-        // first checks each theme in the active chain for an override file.
-        $effectiveLoader = self::$chainResolver !== null
-            ? new ThemeAwareTwigLoader($loader, self::$chainResolver)
-            : $loader;
+        // Per-request theme chain walking: always wrap the FilesystemLoader so
+        // late-bound resolver changes are observed by the active Twig
+        // environment. When no resolver is configured, return an empty chain
+        // so lookups fall straight through to the module-owned template path.
+        $effectiveLoader = new ThemeAwareTwigLoader(
+            $loader,
+            static fn (): array => self::$chainResolver === null
+                ? []
+                : self::normalizeChain((self::$chainResolver)()),
+        );
+        self::$loader = $effectiveLoader;
 
         $cacheDir = self::getWritableCacheDir();
 
@@ -686,7 +694,7 @@ final class ModuleTemplateRegistry
         self::initialize();
 
         try {
-            $source = self::$loader->getSourceContext($templateName);
+            $source = self::getLoader()->getSourceContext($templateName);
             $path = $source->getPath();
             return ($path !== '' && is_file($path)) ? $path : null;
         } catch (\Throwable) {
@@ -701,12 +709,22 @@ final class ModuleTemplateRegistry
         self::$loader = null;
         self::$modulePaths = [];
         self::$initialized = false;
+        self::$chainResolver = null;
     }
 
     public static function getModulePaths(): array
     {
         self::initialize();
         return self::$modulePaths;
+    }
+
+    /**
+     * @param mixed $chain
+     * @return list<string>
+     */
+    private static function normalizeChain(mixed $chain): array
+    {
+        return is_array($chain) ? array_values(array_filter($chain, 'is_string')) : [];
     }
 
     public static function resolveLayout(string $handle): ?array

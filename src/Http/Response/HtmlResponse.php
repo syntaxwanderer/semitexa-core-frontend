@@ -264,14 +264,8 @@ class HtmlResponse extends ResourceResponse
 
         // If a theme chain is active, additionally require every theme in the
         // chain that ships assets. Duplicates dedupe inside AssetCollector.
-        // Unknown ids (project-local child themes without a matching module)
-        // are silently skipped.
         foreach (\Semitexa\Ssr\Template\ModuleTemplateRegistry::getActiveChain() as $themeId) {
-            try {
-                $collector->requireModule($themeId);
-            } catch (\Throwable) {
-                // Unknown module id — expected for project-local child themes.
-            }
+            $collector->requireModule($themeId);
         }
     }
 

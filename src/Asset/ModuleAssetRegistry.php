@@ -12,12 +12,15 @@ use Semitexa\Core\Support\ProjectRoot;
  * Maps module aliases to their Application/Static/ directories for asset serving.
  *
  * Resolution order for every asset path:
- *   1. src/theme/{THEME}/{module}/Static/{path}  (theme override, if THEME is set)
- *   2. {module}/Application/Static/{path}         (module default)
+ *   1. src/theme/{active-chain-theme}/{module}/Static/{path}
+ *      (per-request chain override, leaf first, if a resolver is bound)
+ *   2. src/theme/{THEME}/{module}/Static/{path}
+ *      (legacy boot-time environment override)
+ *   3. {module}/Application/Static/{path}
+ *      (module default)
  *
- * Theme paths are resolved once at boot via the THEME environment variable.
- * No per-request theme switching is supported; a server reload is required to
- * activate a different theme.
+ * Legacy THEME paths are resolved once at boot. Per-request theme chains are
+ * resolved on every lookup through setChainResolver().
  */
 class ModuleAssetRegistry
 {
@@ -119,6 +122,7 @@ class ModuleAssetRegistry
         self::$themeMap = [];
         self::$initialized = false;
         self::$moduleRegistry = null;
+        self::$chainResolver = null;
     }
 
     /**
@@ -170,15 +174,15 @@ class ModuleAssetRegistry
         // Walks leaf → root; first existing file wins. Falls through to
         // legacy $themeMap + base dirs when no chain override matches.
         if (self::$chainResolver !== null) {
-            $chain = (self::$chainResolver)();
-            $chain = is_array($chain) ? array_values(array_filter($chain, 'is_string')) : [];
+            $chain = self::normalizeChain((self::$chainResolver)());
             if ($chain !== []) {
                 $projectRoot = ProjectRoot::get();
                 foreach ($chain as $themeId) {
                     $base = $projectRoot . '/src/theme/' . $themeId . '/' . $module . '/Static';
+                    $realBase = realpath($base);
                     $themeFile = $base . '/' . $path;
                     $realTheme = realpath($themeFile);
-                    if ($realTheme !== false && str_starts_with($realTheme, $base . '/') && is_file($realTheme)) {
+                    if ($realBase !== false && $realTheme !== false && str_starts_with($realTheme, $realBase . '/') && is_file($realTheme)) {
                         return $realTheme;
                     }
                 }
@@ -225,6 +229,15 @@ class ModuleAssetRegistry
             // Environment may not be available in all contexts — fall back to no theme
             return '';
         }
+    }
+
+    /**
+     * @param mixed $chain
+     * @return list<string>
+     */
+    private static function normalizeChain(mixed $chain): array
+    {
+        return is_array($chain) ? array_values(array_filter($chain, 'is_string')) : [];
     }
 
 }

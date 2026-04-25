@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Semitexa\Ssr\Template;
 
 use Semitexa\Core\Support\ProjectRoot;
+use Twig\Error\LoaderError;
 use Twig\Loader\FilesystemLoader;
 use Twig\Loader\LoaderInterface;
 use Twig\Source;
@@ -40,8 +41,13 @@ final class ThemeAwareTwigLoader implements LoaderInterface
     {
         $override = $this->resolveOverride($name);
         if ($override !== null) {
+            $source = file_get_contents($override);
+            if ($source === false) {
+                throw new LoaderError(sprintf('Unable to read template override "%s".', $override));
+            }
+
             return new Source(
-                (string) file_get_contents($override),
+                $source,
                 $name,
                 $override,
             );
@@ -94,19 +100,38 @@ final class ThemeAwareTwigLoader implements LoaderInterface
         $module = $m[1];
         $relative = $m[2];
 
-        $chain = ($this->chainResolver)();
-        $chain = is_array($chain) ? array_values(array_filter($chain, 'is_string')) : [];
+        if (str_contains($relative, '..') || str_starts_with($relative, '/') || str_contains($relative, "\0")) {
+            return null;
+        }
+
+        $chain = self::normalizeChain(($this->chainResolver)());
         if ($chain === []) {
             return null;
         }
 
         $projectRoot = ProjectRoot::get();
         foreach ($chain as $themeId) {
-            $candidate = $projectRoot . '/src/theme/' . $themeId . '/' . $module . '/templates/' . $relative;
-            if (is_file($candidate)) {
-                return $candidate;
+            $base = $projectRoot . '/src/theme/' . $themeId . '/' . $module . '/templates';
+            $realBase = realpath($base);
+            if ($realBase === false) {
+                continue;
+            }
+
+            $candidate = $base . '/' . $relative;
+            $realCandidate = realpath($candidate);
+            if ($realCandidate !== false && str_starts_with($realCandidate, $realBase . '/') && is_file($realCandidate)) {
+                return $realCandidate;
             }
         }
         return null;
+    }
+
+    /**
+     * @param mixed $chain
+     * @return list<string>
+     */
+    private static function normalizeChain(mixed $chain): array
+    {
+        return is_array($chain) ? array_values(array_filter($chain, 'is_string')) : [];
     }
 }

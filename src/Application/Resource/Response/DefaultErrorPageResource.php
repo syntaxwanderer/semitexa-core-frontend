@@ -6,6 +6,7 @@ namespace Semitexa\Ssr\Application\Resource\Response;
 
 use Semitexa\Core\Attribute\AsResource;
 use Semitexa\Core\Contract\ResourceInterface;
+use Semitexa\Core\Log\StaticLoggerBridge;
 use Semitexa\Ssr\Http\Response\FallbackErrorPage;
 use Semitexa\Ssr\Http\Response\HtmlResponse;
 
@@ -84,10 +85,20 @@ final class DefaultErrorPageResource extends HtmlResponse implements ResourceInt
         try {
             return parent::renderTemplate($template, $extraContext);
         } catch (\Throwable $e) {
+            StaticLoggerBridge::error('ssr', 'Default error page template render failed; using fallback page', [
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
+
             $status = $this->getStatusCode() ?: 500;
             $context = $this->getRenderContext();
             $reason = is_string($context['reasonPhrase'] ?? null) ? $context['reasonPhrase'] : 'Internal Server Error';
-            $this->setContent(FallbackErrorPage::render($status, $reason, $e->getMessage()));
+            $debugDetails = $context['debugDetails'] ?? null;
+            $appDebug = strtolower((string) getenv('APP_DEBUG'));
+            $isDebugEnabled = is_array($debugDetails)
+                || in_array($appDebug, ['1', 'true', 'on', 'yes'], true);
+            $detail = $isDebugEnabled ? $e->getMessage() : 'An unexpected error occurred.';
+            $this->setContent(FallbackErrorPage::render($status, $reason, $detail));
 
             return $this;
         }
