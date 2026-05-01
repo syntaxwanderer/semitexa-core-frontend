@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Ssr\Domain\Contract;
 
-use Semitexa\Ssr\Http\Response\HtmlSlotResponse;
+use Semitexa\Ssr\Application\Service\Http\Response\HtmlSlotResponse;
 
 /**
  * @template TSlot of HtmlSlotResponse

@@ -6,10 +6,10 @@ namespace Semitexa\Ssr\Application\Console\Command;
 
 use Semitexa\Core\Attribute\AsCommand;
 use Semitexa\Core\Attribute\InjectAsReadonly;
-use Semitexa\Ssr\Seo\AiSitemapLocator;
-use Semitexa\Ssr\Seo\Sitemap\SitemapGenerationContext;
-use Semitexa\Ssr\Seo\Sitemap\SitemapGenerator;
-use Semitexa\Ssr\Seo\Sitemap\SitemapStoragePath;
+use Semitexa\Ssr\Application\Service\Seo\AiSitemapLocator;
+use Semitexa\Ssr\Application\Service\Seo\Sitemap\SitemapGenerationContext;
+use Semitexa\Ssr\Application\Service\Seo\Sitemap\SitemapGenerator;
+use Semitexa\Ssr\Application\Service\Seo\Sitemap\SitemapStoragePath;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
