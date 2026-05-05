@@ -4,20 +4,18 @@ declare(strict_types=1);
 
 namespace Semitexa\Ssr\Application\Payload\Request;
 
-use Semitexa\Authorization\Attribute\PublicEndpoint;
-use Semitexa\Core\Attribute\AsPayload;
+use Semitexa\Core\Attribute\AsPublicPayload;
 use Semitexa\Core\Exception\ValidationException;
 use Semitexa\Core\Http\Response\ResourceResponse;
 use Semitexa\Core\Validation\Trait\NotBlankValidationTrait;
 
-#[AsPayload(
+#[AsPublicPayload(
     path: '/__semitexa_component_event',
     methods: ['POST'],
     responseWith: ResourceResponse::class,
     consumes: ['application/json'],
     produces: ['application/json'],
 )]
-#[PublicEndpoint]
 final class ComponentEventDispatchPayload
 {
     use NotBlankValidationTrait;

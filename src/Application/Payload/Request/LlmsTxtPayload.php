@@ -4,15 +4,12 @@ declare(strict_types=1);
 
 namespace Semitexa\Ssr\Application\Payload\Request;
 
-use Semitexa\Authorization\Attribute\PublicEndpoint;
-use Semitexa\Core\Attribute\AsPayload;
+use Semitexa\Core\Attribute\AsPublicPayload;
 use Semitexa\Core\Http\Response\ResourceResponse;
 
-#[PublicEndpoint]
-#[AsPayload(
+#[AsPublicPayload(
     path: '/llms.txt',
     methods: ['GET'],
-    public: true,
     responseWith: ResourceResponse::class,
     produces: ['text/plain']
 )]

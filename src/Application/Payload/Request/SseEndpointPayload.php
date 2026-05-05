@@ -4,19 +4,17 @@ declare(strict_types=1);
 
 namespace Semitexa\Ssr\Application\Payload\Request;
 
-use Semitexa\Authorization\Attribute\PublicEndpoint;
-use Semitexa\Core\Attribute\AsPayload;
+use Semitexa\Core\Attribute\AsPublicPayload;
 use Semitexa\Core\Attribute\TransportType;
 use Semitexa\Core\Http\Response\ResourceResponse;
 
-#[AsPayload(
+#[AsPublicPayload(
     responseWith: ResourceResponse::class,
     path: '/sse',
     methods: ['GET'],
     transport: TransportType::Sse,
     produces: ['text/event-stream'],
 )]
-#[PublicEndpoint]
 class SseEndpointPayload
 {
     protected string $sessionId = '';
