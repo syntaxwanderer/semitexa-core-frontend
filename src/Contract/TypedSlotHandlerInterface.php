@@ -4,18 +4,11 @@ declare(strict_types=1);
 
 namespace Semitexa\Ssr\Contract;
 
-use Semitexa\Ssr\Http\Response\HtmlSlotResponse;
+use Semitexa\Ssr\Domain\Contract\TypedSlotHandlerInterface as DomainTypedSlotHandlerInterface;
 
 /**
- * @template TSlot of HtmlSlotResponse
- * @template TResult of HtmlSlotResponse
+ * @deprecated Use Semitexa\Ssr\Domain\Contract\TypedSlotHandlerInterface instead.
  */
-interface TypedSlotHandlerInterface
-{
-    /**
-     * @param TSlot $slot
-     *
-     * @return TResult
-     */
-    public function handle(object $slot): object;
+if (!interface_exists(TypedSlotHandlerInterface::class, false)) {
+    class_alias(DomainTypedSlotHandlerInterface::class, TypedSlotHandlerInterface::class);
 }

@@ -4,20 +4,11 @@ declare(strict_types=1);
 
 namespace Semitexa\Ssr\Seo\Sitemap;
 
-use Attribute;
+use Semitexa\Ssr\Application\Service\Seo\Sitemap\AsSitemapProvider as AppAsSitemapProvider;
 
 /**
- * Marks a class as a sitemap URL provider.
- *
- * The class must implement SitemapUrlProviderInterface.
- * Providers are discovered automatically and invoked during sitemap generation.
- *
- * Lower priority values execute first.
+ * @deprecated Use Semitexa\Ssr\Application\Service\Seo\Sitemap\AsSitemapProvider instead.
  */
-#[Attribute(Attribute::TARGET_CLASS)]
-final class AsSitemapProvider
-{
-    public function __construct(
-        public int $priority = 0,
-    ) {}
+if (!class_exists(AsSitemapProvider::class, false)) {
+    class_alias(AppAsSitemapProvider::class, AsSitemapProvider::class);
 }

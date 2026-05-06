@@ -4,17 +4,15 @@ declare(strict_types=1);
 
 namespace Semitexa\Ssr\Application\Payload\Request;
 
-use Semitexa\Authorization\Attribute\PublicEndpoint;
-use Semitexa\Core\Attribute\AsPayload;
+use Semitexa\Core\Attribute\AsPublicPayload;
 use Semitexa\Core\Http\Response\ResourceResponse;
 
-#[AsPayload(
+#[AsPublicPayload(
     responseWith: ResourceResponse::class,
     path: '/__semitexa_hug',
     methods: ['GET'],
     name: 'ssr.hug',
 )]
-#[PublicEndpoint]
 class SsrFallbackPayload
 {
     protected string $handle = '';

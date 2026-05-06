@@ -4,17 +4,11 @@ declare(strict_types=1);
 
 namespace Semitexa\Ssr\Seo\Sitemap;
 
+use Semitexa\Ssr\Application\Service\Seo\Sitemap\SitemapUrlProviderInterface as AppSitemapUrlProviderInterface;
+
 /**
- * Implement this interface and mark the class with #[AsSitemapProvider]
- * to contribute URLs to the generated sitemap.xml.
- *
- * Providers are discovered automatically by the framework.
- * Any module can add its own provider without configuration.
+ * @deprecated Use Semitexa\Ssr\Application\Service\Seo\Sitemap\SitemapUrlProviderInterface instead.
  */
-interface SitemapUrlProviderInterface
-{
-    /**
-     * @return iterable<SitemapUrl>
-     */
-    public function provideUrls(SitemapGenerationContext $context): iterable;
+if (!interface_exists(SitemapUrlProviderInterface::class, false)) {
+    class_alias(AppSitemapUrlProviderInterface::class, SitemapUrlProviderInterface::class);
 }
