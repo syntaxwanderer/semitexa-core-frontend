@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Semitexa\Ssr\Application\Payload\Request;
 
 use Semitexa\Core\Attribute\AsPublicPayload;
+use Semitexa\Core\Contract\ValidatablePayloadInterface;
 use Semitexa\Core\Exception\ValidationException;
 use Semitexa\Core\Http\Response\ResourceResponse;
 use Semitexa\Core\Validation\Trait\NotBlankValidationTrait;
@@ -16,7 +17,7 @@ use Semitexa\Core\Validation\Trait\NotBlankValidationTrait;
     consumes: ['application/json'],
     produces: ['application/json'],
 )]
-final class ComponentEventDispatchPayload
+final class ComponentEventDispatchPayload implements ValidatablePayloadInterface
 {
     use NotBlankValidationTrait;
 
@@ -34,6 +35,20 @@ final class ComponentEventDispatchPayload
 
     /** @var array<string, mixed> */
     private array $interaction = [];
+
+    public function validate(): array
+    {
+        $errors = [];
+        if ($this->componentId === '')   $errors['componentId'] = ['Field is required.'];
+        if ($this->componentName === '') $errors['componentName'] = ['Field is required.'];
+        if ($this->eventClass === '')    $errors['eventClass'] = ['Field is required.'];
+        if ($this->frontendEvent === '') $errors['frontendEvent'] = ['Field is required.'];
+        if ($this->signature === '')     $errors['signature'] = ['Field is required.'];
+        if ($this->pagePath === '')      $errors['pagePath'] = ['Field is required.'];
+        if ($this->issuedAt === 0)       $errors['issuedAt'] = ['Field is required.'];
+
+        return $errors;
+    }
 
     public function getComponentId(): string { return $this->componentId; }
     public function setComponentId(string $componentId): void
