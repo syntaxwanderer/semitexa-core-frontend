@@ -1,44 +1,45 @@
 {
-  "name": "semitexa/ssr",
-  "description": "Semitexa SSR - Twig-based server rendering with components, layouts, assets, and deferred slots",
-  "type": "semitexa-module",
-  "license": "MIT",
-  "authors": [
-    {
-      "name": "Semitexa",
-      "email": "support@semitexa.com"
-    }
-  ],
-  "require": {
-    "php": "^8.4",
-    "twig/twig": "^3.10",
-    "semitexa/scheduler": "*",
-    "semitexa/locale": "*",
-    "semitexa/tenancy": "*",
-    "semitexa/theme": "*"
-  },
-  "suggest": {
-    "semitexa/scheduler": "Required for automatic scheduled sitemap regeneration (daily cron job)"
-  },
-  "autoload": {
-    "psr-4": {
-      "Semitexa\\Ssr\\": "src/"
-    }
-  },
-  "extra": {
-    "semitexa-module": {
-      "name": "core-frontend",
-      "description": "Server-Side Rendering capabilities using Twig"
-    }
-  },
-  "keywords": [
-    "semitexa",
-    "ssr",
-    "twig",
-    "rendering",
-    "frontend",
-    "components",
-    "layouts",
-    "deferred"
-  ]
+    "name": "semitexa/ssr",
+    "description": "Semitexa SSR - Twig-based server rendering with components, layouts, assets, and deferred slots",
+    "type": "semitexa-module",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Semitexa",
+            "email": "support@semitexa.com"
+        }
+    ],
+    "require": {
+        "php": "^8.4",
+        "twig/twig": "^3.10",
+        "semitexa/scheduler": "*",
+        "semitexa/locale": "*",
+        "semitexa/tenancy": "*",
+        "semitexa/theme": "*"
+    },
+    "suggest": {
+        "semitexa/scheduler": "Required for automatic scheduled sitemap regeneration (daily cron job)"
+    },
+    "autoload": {
+        "psr-4": {
+            "Semitexa\\Ssr\\": "src/"
+        }
+    },
+    "extra": {
+        "semitexa-module": {
+            "name": "core-frontend",
+            "description": "Server-Side Rendering capabilities using Twig"
+        }
+    },
+    "keywords": [
+        "semitexa",
+        "ssr",
+        "twig",
+        "rendering",
+        "frontend",
+        "components",
+        "layouts",
+        "deferred"
+    ],
+    "version": "v1.0.33"
 }
