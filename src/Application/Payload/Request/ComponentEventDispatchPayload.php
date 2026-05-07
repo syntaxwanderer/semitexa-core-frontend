@@ -53,37 +53,37 @@ final class ComponentEventDispatchPayload implements ValidatablePayloadInterface
     public function getComponentId(): string { return $this->componentId; }
     public function setComponentId(string $componentId): void
     {
-        $this->componentId = self::requireNotBlank('componentId', $componentId);
+        $this->componentId = $this->requireNotBlank('componentId', $componentId);
     }
 
     public function getComponentName(): string { return $this->componentName; }
     public function setComponentName(string $componentName): void
     {
-        $this->componentName = self::requireNotBlank('componentName', $componentName);
+        $this->componentName = $this->requireNotBlank('componentName', $componentName);
     }
 
     public function getEventClass(): string { return $this->eventClass; }
     public function setEventClass(string $eventClass): void
     {
-        $this->eventClass = self::requireNotBlank('eventClass', $eventClass);
+        $this->eventClass = $this->requireNotBlank('eventClass', $eventClass);
     }
 
     public function getFrontendEvent(): string { return $this->frontendEvent; }
     public function setFrontendEvent(string $frontendEvent): void
     {
-        $this->frontendEvent = self::requireNotBlank('frontendEvent', $frontendEvent);
+        $this->frontendEvent = $this->requireNotBlank('frontendEvent', $frontendEvent);
     }
 
     public function getSignature(): string { return $this->signature; }
     public function setSignature(string $signature): void
     {
-        $this->signature = self::requireNotBlank('signature', $signature);
+        $this->signature = $this->requireNotBlank('signature', $signature);
     }
 
     public function getPagePath(): string { return $this->pagePath; }
     public function setPagePath(string $pagePath): void
     {
-        $this->pagePath = self::requireNotBlank('pagePath', $pagePath);
+        $this->pagePath = $this->requireNotBlank('pagePath', $pagePath);
     }
 
     public function getSessionBinding(): string { return $this->sessionBinding; }

@@ -37,9 +37,13 @@ readonly class StaticAssetHandler
     {
         ModuleAssetRegistry::setModuleRegistry($this->moduleRegistry);
 
-        $uri = isset($request->server['request_uri']) && is_string($request->server['request_uri'])
+        $rawUri = isset($request->server['request_uri']) && is_string($request->server['request_uri'])
             ? $request->server['request_uri']
             : '';
+        $queryString = isset($request->server['query_string']) && is_string($request->server['query_string'])
+            ? $request->server['query_string']
+            : (str_contains($rawUri, '?') ? explode('?', $rawUri, 2)[1] ?? '' : '');
+        $uri = $rawUri;
         if ($uri !== '' && str_contains($uri, '?')) {
             $uri = explode('?', $uri, 2)[0];
         }
@@ -86,12 +90,77 @@ readonly class StaticAssetHandler
         $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
         $contentType = self::CONTENT_TYPES[$extension] ?? 'application/octet-stream';
 
+        $cacheControl = self::cacheControlForUri($queryString === '' ? $uri : $uri . '?' . $queryString);
+        $etag = self::etagForFile($filePath);
+
+        $ifNoneMatch = self::requestHeader($request, 'if-none-match');
+        if ($ifNoneMatch !== null && $etag !== '' && trim($ifNoneMatch) === $etag) {
+            $response->status(304);
+            $response->header('Cache-Control', $cacheControl);
+            $response->header('ETag', $etag);
+            $response->end();
+            return true;
+        }
+
         $response->status(200);
         $response->header('Content-Type', $contentType);
-        $response->header('Cache-Control', 'public, max-age=31536000, immutable');
+        $response->header('Cache-Control', $cacheControl);
+        if ($etag !== '') {
+            $response->header('ETag', $etag);
+        }
         $response->sendfile($filePath);
 
         return true;
+    }
+
+    /**
+     * Pick the cache-control header for an asset URI.
+     *
+     * `immutable` is a one-year-no-revalidate promise. We may only make that
+     * promise when the URL itself encodes the content version (`?v=<hash>`),
+     * because the URL is the cache key. AssetManager::getUrl() always appends
+     * `?v=<sha256-12hex>` of the file. A hardcoded URL with no version string
+     * would otherwise pin a stale copy in every browser for a year, which is
+     * how the PipelineTest CSRF "fix" silently never reached the page.
+     */
+    public static function cacheControlForUri(string $uri): string
+    {
+        return self::isVersionedUri($uri)
+            ? 'public, max-age=31536000, immutable'
+            : 'public, max-age=0, must-revalidate';
+    }
+
+    /**
+     * Strong ETag derived from mtime + size — cheap and stable for `sendfile`d
+     * static assets. Returns the quoted RFC 7232 form, or '' when stat fails.
+     */
+    public static function etagForFile(string $filePath): string
+    {
+        $stat = @stat($filePath);
+        if ($stat === false) {
+            return '';
+        }
+        return sprintf('"%x-%x"', $stat['mtime'], $stat['size']);
+    }
+
+    private static function isVersionedUri(string $uri): bool
+    {
+        $q = strpos($uri, '?');
+        if ($q === false) {
+            return false;
+        }
+        parse_str(substr($uri, $q + 1), $params);
+        $v = $params['v'] ?? null;
+        return is_string($v) && $v !== '';
+    }
+
+    private static function requestHeader(SwooleRequest $request, string $loweredName): ?string
+    {
+        if (!is_array($request->header)) {
+            return null;
+        }
+        $value = $request->header[$loweredName] ?? null;
+        return is_string($value) ? $value : null;
     }
 
     private static function matchPrefix(string $uri): ?string
