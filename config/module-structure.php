@@ -5,6 +5,10 @@ declare(strict_types=1);
 use Semitexa\Dev\Application\Service\Ai\Verify\Structure\LocalModuleStructureExtension;
 use Semitexa\Dev\Application\Service\Ai\Verify\Structure\ModuleStructureRule;
 
+if (!class_exists(LocalModuleStructureExtension::class) || !class_exists(ModuleStructureRule::class)) {
+    return null;
+}
+
 $pascalCasePhp = '/^[A-Z][A-Za-z0-9_]*\.php$/';
 
 return new LocalModuleStructureExtension(

@@ -59,15 +59,13 @@ final class StaticAssetHandlerTest extends TestCase
     }
 
     #[Test]
-    public function etag_for_file_is_quoted_mtime_size_pair(): void
+    public function etag_for_file_is_quoted_sha256_hash(): void
     {
         $tmp = tempnam(sys_get_temp_dir(), 'static-asset-etag-');
         self::assertNotFalse($tmp);
         try {
             file_put_contents($tmp, 'hello world');
-            $stat = stat($tmp);
-            self::assertNotFalse($stat);
-            $expected = sprintf('"%x-%x"', $stat['mtime'], $stat['size']);
+            $expected = '"' . hash('sha256', 'hello world') . '"';
 
             self::assertSame($expected, StaticAssetHandler::etagForFile($tmp));
             self::assertStringStartsWith('"', StaticAssetHandler::etagForFile($tmp));
@@ -86,5 +84,20 @@ final class StaticAssetHandlerTest extends TestCase
         // An empty ETag sentinel signals handle() to skip emitting the header.
         // This keeps the conditional-GET path safe when stat() fails.
         self::assertSame('', @StaticAssetHandler::etagForFile($missing));
+    }
+
+    #[Test]
+    public function if_none_match_accepts_star_lists_and_weak_matches(): void
+    {
+        $method = new \ReflectionMethod(StaticAssetHandler::class, 'ifNoneMatchMatches');
+        $method->setAccessible(true);
+        $etag = '"abc123"';
+
+        self::assertTrue($method->invoke(null, '*', $etag));
+        self::assertTrue($method->invoke(null, $etag, $etag));
+        self::assertTrue($method->invoke(null, 'W/"abc123"', $etag));
+        self::assertTrue($method->invoke(null, '"other", W/"abc123"', $etag));
+        self::assertFalse($method->invoke(null, '"other", W/"else"', $etag));
+        self::assertFalse($method->invoke(null, null, $etag));
     }
 }

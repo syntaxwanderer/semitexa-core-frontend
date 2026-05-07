@@ -94,7 +94,7 @@ readonly class StaticAssetHandler
         $etag = self::etagForFile($filePath);
 
         $ifNoneMatch = self::requestHeader($request, 'if-none-match');
-        if ($ifNoneMatch !== null && $etag !== '' && trim($ifNoneMatch) === $etag) {
+        if (self::ifNoneMatchMatches($ifNoneMatch, $etag)) {
             $response->status(304);
             $response->header('Cache-Control', $cacheControl);
             $response->header('ETag', $etag);
@@ -131,16 +131,16 @@ readonly class StaticAssetHandler
     }
 
     /**
-     * Strong ETag derived from mtime + size — cheap and stable for `sendfile`d
-     * static assets. Returns the quoted RFC 7232 form, or '' when stat fails.
+     * Strong ETag derived from file content. Returns the quoted RFC 7232
+     * form, or '' when hashing fails.
      */
     public static function etagForFile(string $filePath): string
     {
-        $stat = @stat($filePath);
-        if ($stat === false) {
+        $hash = @hash_file('sha256', $filePath);
+        if (!is_string($hash) || $hash === '') {
             return '';
         }
-        return sprintf('"%x-%x"', $stat['mtime'], $stat['size']);
+        return sprintf('"%s"', $hash);
     }
 
     private static function isVersionedUri(string $uri): bool
@@ -161,6 +161,46 @@ readonly class StaticAssetHandler
         }
         $value = $request->header[$loweredName] ?? null;
         return is_string($value) ? $value : null;
+    }
+
+    private static function ifNoneMatchMatches(?string $headerValue, string $etag): bool
+    {
+        if ($headerValue === null || $etag === '') {
+            return false;
+        }
+
+        $normalizedCurrent = self::normalizeEtagToken($etag);
+        if ($normalizedCurrent === null) {
+            return false;
+        }
+
+        foreach (explode(',', $headerValue) as $rawToken) {
+            $token = trim($rawToken);
+            if ($token === '') {
+                continue;
+            }
+            if ($token === '*') {
+                return true;
+            }
+            if (self::normalizeEtagToken($token) === $normalizedCurrent) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function normalizeEtagToken(string $token): ?string
+    {
+        $trimmed = trim($token);
+        if ($trimmed === '') {
+            return null;
+        }
+        if (str_starts_with($trimmed, 'W/')) {
+            $trimmed = substr($trimmed, 2);
+        }
+
+        return trim($trimmed);
     }
 
     private static function matchPrefix(string $uri): ?string
