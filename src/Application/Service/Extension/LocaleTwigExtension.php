@@ -141,6 +141,9 @@ final class LocaleTwigExtension
     {
         $supported = LocaleContextStore::getSupportedLocales();
 
-        return $supported !== [] ? $supported : LocaleConfig::fromEnvironment()->supportedLocales;
+        // array_values: the store hands back whatever keys it was given, and a
+        // list is what the signature promises — a caller that iterates by index
+        // would otherwise skip entries on a sparse array.
+        return array_values($supported !== [] ? $supported : LocaleConfig::fromEnvironment()->supportedLocales);
     }
 }
