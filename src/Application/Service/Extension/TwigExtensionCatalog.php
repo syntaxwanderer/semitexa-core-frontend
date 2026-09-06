@@ -15,7 +15,13 @@ use Twig\TwigFilter;
 #[AsService]
 final class TwigExtensionCatalog
 {
-    /** @var array<string, array{callback: callable, options: array}> */
+    /**
+     * Twig's own option bag: is_safe, needs_context, needs_environment and the
+     * like. Stated as a map of strings to anything rather than a bare `array`
+     * because a value type is what makes the property checkable at all.
+     *
+     * @var array<string, array{callback: callable, options: array<string, mixed>}>
+     */
     private array $functions = [];
 
     /** @var array<string, callable> */
@@ -50,6 +56,14 @@ final class TwigExtensionCatalog
         $this->initialized = true;
 
         foreach ($extensionClasses as $class) {
+            // Discovery hands back plain strings; ReflectionClass wants a
+            // class-string. The guard is not ceremony — a stale discovery cache
+            // can name a class that no longer exists, and reflecting it throws
+            // rather than skipping.
+            if (!class_exists($class)) {
+                continue;
+            }
+
             $reflection = new \ReflectionClass($class);
 
             if (!$reflection->isInstantiable()) {
@@ -76,6 +90,9 @@ final class TwigExtensionCatalog
         }
     }
 
+    /**
+     * @param array<string, mixed> $options Twig function options, passed through untouched
+     */
     public function registerFunction(
         string $name,
         callable $callback,
@@ -92,7 +109,7 @@ final class TwigExtensionCatalog
         $this->filters[$name] = $callback;
     }
 
-    /** @return array<string, array{callback: callable, options: array}> */
+    /** @return array<string, array{callback: callable, options: array<string, mixed>}> */
     public function getFunctions(): array
     {
         $this->initialize();
