@@ -902,11 +902,12 @@ final class SseServer
      *        that did not opt in), the addressing key is announced as a sane
      *        default. No client/data-frame change — the id rides its own event.
      */
+    /** @param array<string, mixed>|\Closure(): array<string, mixed> $initialFrameData resolved after the caps */
     public function serveResourceStream(
         Request $request,
         Response $response,
         string $sessionId,
-        array $initialFrameData,
+        array|\Closure $initialFrameData,
         ?SubscriptionRecord $record = null,
         ?ReRunContext $context = null,
         string $serverStreamId = '',
@@ -962,7 +963,11 @@ final class SseServer
         // the SAME stamp lands on every re-run frame (see dispatchReRun), so the
         // synchrony-pin byte-identity between initial and re-run frames holds.
         $streamingId = $record?->streamingId ?? $sessionId;
-        $this->writeSse($response, SseFrameFactory::stampSubscriptionId($initialFrameData, $streamingId));
+
+        // Past the caps on purpose: a first frame can cost as much as the
+        // request itself (the graphql one IS a document execution).
+        $frame = $initialFrameData instanceof \Closure ? ($initialFrameData)() : $initialFrameData;
+        $this->writeSse($response, SseFrameFactory::stampSubscriptionId($frame, $streamingId));
 
         // Consumer-half launch (R5 · first production caller). Populates both tiers
         // and drives R3 subscribe-on-first; the tier-2 ReRunContext is keyed by

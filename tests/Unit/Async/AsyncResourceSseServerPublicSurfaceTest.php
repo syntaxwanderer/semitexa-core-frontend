@@ -61,7 +61,7 @@ final class AsyncResourceSseServerPublicSurfaceTest extends TestCase
         'mintStreamId' => 'static function(): string',
         'publishScopeInvalidation' => 'static function(string $channel): void',
         'renderResource' => 'static function(object $resource): string',
-        'serveResourceStream' => 'static function(Swoole\Http\Request $request, Swoole\Http\Response $response, string $sessionId, array $initialFrameData, ?Semitexa\Ssr\Domain\Model\SubscriptionRecord $record=, ?Semitexa\Core\Pipeline\ReRun\ReRunContext $context=, string $serverStreamId=): void',
+        'serveResourceStream' => 'static function(Swoole\Http\Request $request, Swoole\Http\Response $response, string $sessionId, Closure|array $initialFrameData, ?Semitexa\Ssr\Domain\Model\SubscriptionRecord $record=, ?Semitexa\Core\Pipeline\ReRun\ReRunContext $context=, string $serverStreamId=): void',
         'setConnectCoordinator' => 'static function(?Semitexa\Ssr\Application\Service\Async\ConnectCoordinator $coordinator): void',
         'setDeferredBlockOrchestrator' => 'static function(?Semitexa\Ssr\Application\Service\DeferredBlockOrchestrator $orchestrator): void',
         'setInstance' => 'static function(Semitexa\Ssr\Application\Service\Async\SseServer $server): void',

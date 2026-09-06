@@ -68,7 +68,8 @@ final class AsyncResourceSseServer
         return self::instance()->handle($request, $response);
     }
 
-    public static function serveResourceStream(Request $request, Response $response, string $sessionId, array $initialFrameData, ?SubscriptionRecord $record = null, ?ReRunContext $context = null, string $serverStreamId = ''): void
+    /** @param array<string, mixed>|\Closure(): array<string, mixed> $initialFrameData resolved after the connection caps */
+    public static function serveResourceStream(Request $request, Response $response, string $sessionId, array|\Closure $initialFrameData, ?SubscriptionRecord $record = null, ?ReRunContext $context = null, string $serverStreamId = ''): void
     {
         self::instance()->serveResourceStream($request, $response, $sessionId, $initialFrameData, $record, $context, $serverStreamId);
     }
