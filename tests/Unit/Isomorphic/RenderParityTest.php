@@ -155,6 +155,12 @@ final class RenderParityTest extends TestCase
         return $flag !== false && $flag !== '' && $flag !== '0';
     }
 
+    /**
+     * Path to the node binary, or null when this environment has none.
+     *
+     * Resolved once and remembered: the answer cannot change inside a run, and
+     * every data-set case would otherwise shell out to look for it again.
+     */
     private static function node(): ?string
     {
         static $path = false;
