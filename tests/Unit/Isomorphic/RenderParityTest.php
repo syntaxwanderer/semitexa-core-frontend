@@ -32,10 +32,20 @@ use Twig\Loader\ArrayLoader;
  *
  * It executes the SHIPPED semitexa-twig.js through node rather than a re-implementation,
  * because a parity test against a copy proves nothing about what the browser runs.
+ *
+ * ⚠️ WITHOUT NODE THIS TEST SKIPS, and a skip is indistinguishable from a pass in a
+ * summary line. That is not hypothetical: the 2026-09-02 release preflight ran green in a
+ * clone with no node, so parity was never checked for that release and only the skip count
+ * (23 there against 10 in dev) said so. An environment that means to VERIFY a release sets
+ * `SEMITEXA_PARITY_REQUIRED=1` and a missing node then fails instead of skipping —
+ * the check refuses to be quietly absent from the one run that matters.
  */
 final class RenderParityTest extends TestCase
 {
     private const BRIDGE = __DIR__ . '/render-with-client-twig.js';
+
+    /** Set by an environment that must not accept a skip here — the release preflight. */
+    private const REQUIRED = 'SEMITEXA_PARITY_REQUIRED';
 
     /**
      * @return array<string, array{string, array<string, mixed>}>
@@ -101,6 +111,15 @@ final class RenderParityTest extends TestCase
     private static function renderWithClientEngine(string $template, array $data): string
     {
         if (self::node() === null) {
+            if (self::parityIsRequired()) {
+                self::fail(
+                    'node is missing and ' . self::REQUIRED . ' is set, so this run must not '
+                    . 'report parity it did not check. Install node in the environment running '
+                    . 'the tests — for a release clone that means rebuilding its image from the '
+                    . 'current scaffold Dockerfile.',
+                );
+            }
+
             self::markTestSkipped('node is required to execute the client renderer.');
         }
 
@@ -121,6 +140,19 @@ final class RenderParityTest extends TestCase
         self::assertTrue($decoded['ok'] ?? false, 'client renderer failed: ' . ($decoded['error'] ?? 'unknown'));
 
         return (string) $decoded['out'];
+    }
+
+    /**
+     * Whether a skip is acceptable in this environment.
+     *
+     * Anything but an explicit off switch counts as required once the variable is
+     * present, so a value of '0' or '' opts out and a typo does not silently disarm it.
+     */
+    private static function parityIsRequired(): bool
+    {
+        $flag = getenv(self::REQUIRED);
+
+        return $flag !== false && $flag !== '' && $flag !== '0';
     }
 
     private static function node(): ?string
