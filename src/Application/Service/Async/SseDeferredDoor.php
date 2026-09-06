@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Semitexa\Ssr\Application\Service\Async;
 
+use Semitexa\Ssr\Application\Service\DeferredBlockOrchestrator;
 use Semitexa\Core\Log\StaticLoggerBridge;
 use Semitexa\Ssr\Application\Service\Isomorphic\DeferredRequestRecord;
 use Semitexa\Ssr\Application\Service\Isomorphic\DeferredRequestRegistry;

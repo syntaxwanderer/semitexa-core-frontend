@@ -46,7 +46,7 @@ final class SseReRunScope
     {
         $context = $this->coroutineContext();
         if ($context !== null) {
-            $context[self::CONTEXT_KEY] = ((int) ($context[self::CONTEXT_KEY] ?? 0)) + 1;
+            $context[self::CONTEXT_KEY] = self::depthIn($context) + 1;
 
             return;
         }
@@ -58,7 +58,7 @@ final class SseReRunScope
     {
         $context = $this->coroutineContext();
         if ($context !== null) {
-            $depth = ((int) ($context[self::CONTEXT_KEY] ?? 0)) - 1;
+            $depth = self::depthIn($context) - 1;
             $context[self::CONTEXT_KEY] = $depth > 0 ? $depth : 0;
 
             return;
@@ -73,7 +73,7 @@ final class SseReRunScope
     {
         $context = $this->coroutineContext();
         if ($context !== null) {
-            return ((int) ($context[self::CONTEXT_KEY] ?? 0)) > 0;
+            return self::depthIn($context) > 0;
         }
 
         return $this->depthFallback > 0;
@@ -95,6 +95,28 @@ final class SseReRunScope
             return null;
         }
 
-        return Coroutine::getContext();
+        $context = Coroutine::getContext();
+
+        // getContext() is documented as nullable and the stubs type it as mixed:
+        // it returns null once the coroutine is being destroyed. A cast would
+        // hand a caller something that is not a Context at exactly the moment
+        // the scope is being torn down.
+        return $context instanceof Coroutine\Context ? $context : null;
+    }
+
+    /**
+     * The recorded depth, or zero when nothing sensible is stored.
+     *
+     * The offset is mixed — a coroutine context is a shared bag any code can
+     * write to — and a blind (int) cast turns whatever it finds into a number,
+     * so a string left there by someone else would read as depth 0 while a
+     * numeric-looking one would read as a real nesting level. Only a numeric
+     * value is a depth; anything else means nobody has counted yet.
+     */
+    private static function depthIn(Coroutine\Context $context): int
+    {
+        $raw = $context[self::CONTEXT_KEY] ?? 0;
+
+        return is_numeric($raw) ? (int) $raw : 0;
     }
 }
